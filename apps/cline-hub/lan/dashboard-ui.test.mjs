@@ -300,7 +300,9 @@ const MutationObserver = class {
 	observe() {}
 }
 // The real page re-syncs through MutationObserver; the test drives it by hand.
-const refreshUi = () => observers.forEach((observer) => observer.callback())
+// Records carry a page-owned target so the layer does not treat them as its own.
+const refreshUi = () =>
+	observers.forEach((observer) => observer.callback([{ target: documentNode }]))
 
 const runLayer = (doc, win) =>
 	new Function(
@@ -430,6 +432,43 @@ composerSubmit.setAttribute("aria-label", "Submit")
 refreshUi()
 check("send button reads 送信 again when generation ends", findById("cline-lan-dashboard-ui-send")?.textContent === "送信")
 check("Enter handler stays single after re-sync", (composerTextarea._listeners.keydown ?? []).length === 1)
+
+/* Regression: the page re-syncs through a MutationObserver, and assigning
+ * textContent replaces the child list even when the string is identical. An
+ * unconditional write inside sync therefore re-triggers the observer, which
+ * calls sync again - the self-feeding loop that pegged the main thread and froze
+ * the PC dashboard the moment a chat view opened. */
+const sendNodeForWrites = findById("cline-lan-dashboard-ui-send")
+let layerDomWrites = 0
+if (sendNodeForWrites) {
+	const currentLabel = sendNodeForWrites.textContent
+	Object.defineProperty(sendNodeForWrites, "textContent", {
+		configurable: true,
+		get: () => currentLabel,
+		set: () => {
+			layerDomWrites += 1
+		},
+	})
+}
+refreshUi()
+refreshUi()
+check(
+	`repeated sync with no page change writes nothing to the DOM (writes=${layerDomWrites})`,
+	layerDomWrites === 0,
+)
+check(
+	"send button keeps its label across no-op syncs",
+	sendNodeForWrites?.textContent === "送信",
+)
+check(
+	"our own mutations do not trigger a re-sync",
+	(() => {
+		const ourNode = documentNode.createElement("div")
+		ourNode.setAttribute("data-cline-lan-dashboard-ui", "1")
+		observers.forEach((observer) => observer.callback([{ target: ourNode }]))
+		return sendNodeForWrites?.textContent === "送信" && layerDomWrites === 0
+	})(),
+)
 
 const dialogHost = () => findById("cline-lan-dashboard-ui-confirm")
 

@@ -1,6 +1,7 @@
 import process from "node:process";
 import {
 	type ClineCoreStartInput,
+	isUnusableSessionError,
 	type SessionRecord,
 	SessionSource,
 } from "@cline/core";
@@ -185,6 +186,78 @@ async function loadHistoryFor(
 	}
 }
 
+/**
+ * Load a session that exists on disk into the hub's runtime memory.
+ *
+ * The hub only accepts a turn for sessions it holds in memory, so a session
+ * created by Cline Desktop (or one from before the hub started) is listed and
+ * hydratable from disk, while sending to it answers `session not found: <id>`.
+ * There is no "attach an existing session" hub command, so the load is done the
+ * same way the CLI's ACP resume does it: start a session seeded with the stored
+ * conversation (`initialMessages`), in the same folder, with the same provider
+ * and model. The conversation continues in that session and the peer is moved
+ * onto it, so the follow-up prompt can be sent for real.
+ */
+export async function loadSessionIntoMemory(
+	ctx: HubContext,
+	peer: BrowserPeer,
+	sessionId: string,
+	overrides?: WebviewConfig,
+): Promise<string | undefined> {
+	if (!ctx.cline) return undefined;
+	const source = await ctx.cline.get(sessionId);
+	// The hub's session list is built from session snapshots, which carry the
+	// workspace path; the plain record for a session created elsewhere can come
+	// back without it, so the tracked row is the better launch context.
+	const tracked = ctx.sessions.get(sessionId);
+	if (!source && !tracked) return undefined;
+	const history = (await loadHistoryFor(ctx, sessionId)) as MessageWithMetadata[];
+	const metadata =
+		source?.metadata && typeof source.metadata === "object"
+			? (source.metadata as Record<string, unknown>)
+			: {};
+	const context = resolveLaunchContext(ctx, {
+		workspaceRoot: tracked?.workspaceRoot || source?.workspaceRoot,
+		cwd:
+			tracked?.cwd ||
+			source?.cwd ||
+			tracked?.workspaceRoot ||
+			source?.workspaceRoot,
+		provider: overrides?.provider || tracked?.provider || source?.provider,
+		model: overrides?.model || tracked?.model || source?.model,
+	});
+	const result = await ctx.cline.start(
+		buildSessionStartInput(context, {
+			mode: overrides?.mode ?? (metadata.mode === "plan" ? "plan" : "act"),
+			sessionMetadata: {
+				...metadata,
+				loadedFromSessionId: sessionId,
+			},
+			initialMessages: history,
+		}),
+	);
+	if (!result.sessionId) return undefined;
+	peer.selectedSessionId = result.sessionId;
+	const loaded = await ctx.cline.get(result.sessionId);
+	const trackedLoaded = loaded ? trackSession(loaded) : undefined;
+	if (trackedLoaded) ctx.sessions.set(trackedLoaded.sessionId, trackedLoaded);
+	ctx.send(peer, { type: "session_started", sessionId: result.sessionId });
+	ctx.send(peer, {
+		type: "session_hydrated",
+		sessionId: result.sessionId,
+		status: loaded?.status,
+		providerId: loaded?.provider ?? context.providerId,
+		modelId: loaded?.model ?? context.modelId,
+		messages: mapHistoryToWebviewMessages(history),
+	});
+	ctx.pushEvent(
+		"Session loaded",
+		`${sessionId} was loaded into the hub so the conversation can continue.`,
+	);
+	broadcastHubState(ctx);
+	return result.sessionId;
+}
+
 export async function selectSession(
 	ctx: HubContext,
 	peer: BrowserPeer,
@@ -273,12 +346,33 @@ export async function sendMessage(
 		await createSession(ctx, peer, text, config, attachments);
 		return;
 	}
-	await ctx.cline.send({
-		sessionId: peer.selectedSessionId,
-		prompt: text,
-		mode: config?.mode === "plan" ? "plan" : "act",
-		userImages: attachments?.userImages,
-	});
+	const mode = config?.mode === "plan" ? "plan" : "act";
+	try {
+		await ctx.cline.send({
+			sessionId: peer.selectedSessionId,
+			prompt: text,
+			mode,
+			userImages: attachments?.userImages,
+		});
+	} catch (error) {
+		// A session the hub lists from disk but does not hold in memory answers
+		// `session not found`. Load it (seeded with its stored conversation) and
+		// send the prompt there, instead of failing the turn.
+		if (!isUnusableSessionError(error)) throw error;
+		const loaded = await loadSessionIntoMemory(
+			ctx,
+			peer,
+			peer.selectedSessionId,
+			config,
+		);
+		if (!loaded) throw error;
+		await ctx.cline.send({
+			sessionId: loaded,
+			prompt: text,
+			mode,
+			userImages: attachments?.userImages,
+		});
+	}
 }
 
 export async function deleteSession(
@@ -429,36 +523,49 @@ export async function restorePeerSession(
 		});
 		return;
 	}
-	const result = await ctx.cline.restore({
-		sessionId: sourceSessionId,
-		checkpointRunCount,
-		cwd: sourceSession.cwd,
-		start: buildStartInputFromSession(sourceSession, {
-			sessionMetadata: {
-				...(sourceSession.metadata ?? {}),
-				restoredFromSessionId: sourceSessionId,
-				restoredCheckpointRunCount: checkpointRunCount,
-			},
-		}),
-		restore: { messages: true, workspace: true },
-	});
-	if (!result.sessionId) {
+	let restoreResult: { sessionId?: string; messages?: unknown[] } | undefined;
+	let restoreError: unknown;
+	try {
+		restoreResult = await ctx.cline.restore({
+			sessionId: sourceSessionId,
+			checkpointRunCount,
+			cwd: sourceSession.cwd,
+			start: buildStartInputFromSession(sourceSession, {
+				sessionMetadata: {
+					...(sourceSession.metadata ?? {}),
+					restoredFromSessionId: sourceSessionId,
+					restoredCheckpointRunCount: checkpointRunCount,
+				},
+			}),
+			restore: { messages: true, workspace: true },
+		});
+	} catch (error) {
+		restoreError = error;
+	}
+	const restoredSessionId = restoreResult?.sessionId;
+	if (!restoredSessionId) {
+		// Desktop sessions usually carry no checkpoint, so the checkpoint restore
+		// has nothing to replay. Load the stored conversation into the hub instead
+		// and keep talking in the session that comes back.
+		const loaded = await loadSessionIntoMemory(ctx, peer, sourceSessionId);
+		if (loaded) return;
+		if (restoreError) throw restoreError;
 		ctx.send(peer, {
 			type: "error",
 			text: "Checkpoint restore did not start a session.",
 		});
 		return;
 	}
-	peer.selectedSessionId = result.sessionId;
-	const restoredSession = await ctx.cline.get(result.sessionId);
+	peer.selectedSessionId = restoredSessionId;
+	const restoredSession = await ctx.cline.get(restoredSessionId);
 	const tracked = restoredSession ? trackSession(restoredSession) : undefined;
 	if (tracked) ctx.sessions.set(tracked.sessionId, tracked);
 	const messages =
-		result.messages ?? (await loadHistoryFor(ctx, result.sessionId));
-	ctx.send(peer, { type: "session_started", sessionId: result.sessionId });
+		restoreResult?.messages ?? (await loadHistoryFor(ctx, restoredSessionId));
+	ctx.send(peer, { type: "session_started", sessionId: restoredSessionId });
 	ctx.send(peer, {
 		type: "session_hydrated",
-		sessionId: result.sessionId,
+		sessionId: restoredSessionId,
 		status: restoredSession?.status,
 		providerId: restoredSession?.provider,
 		modelId: restoredSession?.model,
