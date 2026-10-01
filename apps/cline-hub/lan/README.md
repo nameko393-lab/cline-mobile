@@ -129,7 +129,9 @@ cline-hub status  /  url  /  doctor  /  logs 60  /  firewall --apply
 `not recognized` になります（`.\start.cmd` かフルパスなら動きます）。両スクリプトは先頭で
 自分の場所を割り出すので、フルパス呼び出しはどの場所からでも安全です。
 `start.cmd` / `stop.cmd` はリポジトリ直下にあり、このフォルダの `lan-hub.mjs` を呼みます
-（`start.cmd` は最初に hub の応答を確認し、応答がなければ Cline desktop を起動して待ちます）。
+（`start.cmd` は最初に ① upstream（`product/main`）の新しいコミット確認（一覧 + y/N で
+`git pull --ff-only` + 再ビルド + 注入 UI 層の再適用 + 再起動）と ② hub の応答確認
+（応答がなければ Cline desktop を起動して待ちます）を行います）。
 
 `bun` は PATH → `%USERPROFILE%\AppData\Roaming\npm\...` → `%USERPROFILE%\.bun\bin` の順に探します。
 

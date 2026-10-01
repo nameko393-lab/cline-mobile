@@ -46,6 +46,8 @@ powershell -ExecutionPolicy Bypass -File apps\cline-hub\lan\install-cli.ps1
                                 :: 任意: cline-hub start / stop / status / doctor
 ```
 
+`start.cmd` は起動前に **upstream（`product/main`）の新しいコミットを確認**します。一覧を表示して `y/N` で伺い、`y` のときだけ `git pull --ff-only` + 再ビルド + 注入 UI 層の再適用 + ダッシュボード再起動を実行します（`n`・オフライン・ローカル変更ありなら無変更で続行）。
+
 `start.cmd` は起動前に **Cline hub が応答しているかを確認**します（`bun lan-hub.mjs hub`）。応答しない場合は **Cline desktop を自動で起動**し、hub が立ち上がるまで最大 90 秒待ってから続行します。立ち上がらない場合だけエラー終了し、インストール先（https://cline.bot/desktop）と確認コマンドを表示します。desktop を停止・再起動・設定変更することは一切ありません。
 
 ---
@@ -153,12 +155,21 @@ start /a http://localhost:8788/health
 | 目的 | コマンド |
 |---|---|
 | 起動 / 停止 | `start.cmd` / `stop.cmd`（**リポジトリ直下**、`cline-hub start` / `stop`） |
+| 更新確認 / 適用 | `start.cmd` の [1/5]（一覧 + y/N → `git pull --ff-only` + 再ビルド + 再起動） |
 | hub だけ確認 / 起動 | `bun lan-hub.mjs hub` / `bun lan-hub.mjs hub --launch`（`start.cmd` が毎回実行） |
 | 反映（ダッシュボードはソース起動） | `bun lan-hub.mjs restart`（PC 用は `restart --local`） |
 | 状態 / 招待 URL / 診断 / ログ | `status` / `url`（`--qr`）/ `doctor` / `logs 60` |
 | ログファイル | `apps\cline-hub\lan\logs\dashboard.log`（スマホ用）・`dashboard-local.log`（PC 用） |
 
 ## 更新
+
+`start.cmd` の **[1/5] Update check** が、upstream（`product/main`）の新しいコミットを
+`git fetch`（読み取りのみ）で数え、一覧を表示して **y/N で確認**します。`y` を答えたときだけ
+`git pull --ff-only` → `bun install` → `build:sdk` → `build:webview` → 注入 UI 層の再適用 →
+ダッシュボード再起動 を実行します。`n`・オフライン・ローカル変更あり・fast-forward 不可の場合は
+**何も変更せず**、現在のまま起動を続けます（`CLINE_INSTALL_DEFAULTS=1` は常に `n`）。
+
+手動で更新する場合:
 
 ```cmd
 git pull product main
@@ -186,6 +197,7 @@ cline-hub restart
 | `session not found` | 自動で hub に読み込み直して送り直す。PC 側で編集したファイルは先にコミット |
 | 送信ボタンが無い / Enter で送信される（スマホ） | `bun run -F @cline/cline-hub build:webview` → `bun lan-hub.mjs ui` → `restart` → スマホ再読み込み |
 | 新規セッションボタン / 削除確認が出ない | `doctor` の `UI layer` を確認して `start`（または `bun lan-hub.mjs ui`）し直す |
+| `update skipped`（更新が飛ぶ） | ローカル変更あり。`git status` でコミット / 破棄してから `start.cmd`（`y`） |
 
 詳細は [apps/cline-hub/lan/README.md](apps/cline-hub/lan/README.md)（ランチャー詳細・制約・セキュリティ）と [apps/cline-hub/README.md](apps/cline-hub/README.md)（ダッシュボード本体）を参照。
 
