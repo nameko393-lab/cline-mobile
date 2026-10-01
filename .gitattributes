@@ -2,3 +2,8 @@ demo.gif filter=lfs diff=lfs merge=lfs -text
 assets/docs/demo.gif filter=lfs diff=lfs merge=lfs -text
 
 * text=auto eol=lf
+
+# Windows batch files must stay CRLF: cmd.exe cannot parse LF-only files
+# (it splits lines at the wrong offsets and executes fragments as commands).
+*.cmd text eol=crlf
+*.bat text eol=crlf
