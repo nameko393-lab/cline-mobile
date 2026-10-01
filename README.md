@@ -1,235 +1,194 @@
-<p align="center">
-  <img src="assets/icons/icon.png" width="80" alt="Cline" />
-</p>
+# cline-mobile
 
-<h1 align="center">Cline</h1>
+スマホから PC の Cline を操作するための構成（Cline Hub ダッシュボード + LAN ランチャー）をまとめたリポジトリです。
+Cline 本体のフォークで、変更はダッシュボード（`apps/cline-hub`）だけ、**Cline desktop 本体は無変更**で使います。
 
-<p align="center">
-The open source coding agent in your IDE, terminal, & desktop.
-</p>
-
-<div align="center">
-
-<div align="center">
-<table>
-<tbody>
-<td align="center">
-<a href="https://docs.cline.bot" target="_blank"><strong>Docs</strong></a>
-</td>
-<td align="center">
-<a href="https://discord.gg/cline" target="_blank"><strong>Discord</strong></a>
-</td>
-<td align="center">
-<a href="https://www.reddit.com/r/cline/" target="_blank"><strong>r/cline</strong></a>
-</td>
-<td align="center">
-<a href="https://github.com/cline/cline/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop" target="_blank"><strong>Feature Requests</strong></a>
-</td>
-<td align="center">
-<a href="https://cline.bot/join-us" target="_blank"><strong>Join us!</strong></a>
-</td>
-</tbody>
-</table>
-</div>
-
-</div>
-
-<br>
-
-<div align="center">
-<table>
-<tr>
-<td align="center" width="50%">
-
-### CLI
-
-Run Cline in your terminal.
-Interactive chat or fully headless 
-for CI/CD and scripting.
-
-```
-npm i -g cline
-```
-
-<a href="./apps/cli/README.md">Learn more</a>
-<br><br>
-
-</td>
-<td align="center" width="50%">
-
-### Desktop App
-
-Cline as a native app for macOS and Windows.
-Run agent sessions in any folder, schedule
-routines, and manage models, plugins, and MCP servers.
-
-<a href="https://cline.bot/desktop">Download for macOS and Windows</a>
-<br><br>
-
-</td>
-</tr>
-<tr>
-<td align="center" width="50%">
-
-### VS Code Extension
-
-AI coding assistant in your editor.
-Create files, run commands, browse the web,
-and use tools with human-in-the-loop approval.
-
-<a href="https://marketplace.visualstudio.com/items?itemName=saoudrizwan.claude-dev">Install from VS Marketplace</a>
-<br><br>
-
-</td>
-<td align="center" width="50%">
-
-### JetBrains Plugin
-
-The same Cline experience in IntelliJ IDEA,
-PyCharm, WebStorm, GoLand, and the rest of
-the JetBrains family.
-
-<a href="https://plugins.jetbrains.com/plugin/28247-cline">Install from JetBrains Marketplace</a>
-<br><br>
-
-</td>
-</tr>
-</table>
-</div>
-
-<div align="center">
-<table>
-<tr>
-<td align="center">
-
-### SDK
-
-Build your own AI agents and integrations powered by the same engine that runs the CLI, desktop app, VS Code extension, and JetBrains plugin. Custom tools, multi-agent teams, connectors, scheduled automations, and more.
-
-```
-npm install @cline/sdk
-```
-
-<a href="https://docs.cline.bot/cline-sdk/overview">Documentation</a>
-<br><br>
-
-</td>
-</tr>
-</table>
-</div>
+> **本家 Cline の README が読みたい方はこちら** → [cline/cline / README.md](https://github.com/cline/cline/blob/main/README.md)
+> このリポジトリ直下の `README.md` はプロダクト版に差し替えています（本家 README は上書きせずリンクだけ）。
+> 本家リポジトリ: https://github.com/cline/cline ／ ドキュメント: https://docs.cline.bot
 
 ---
 
-## Index
+## 1 クリックで導入
 
-| Product | Description | Location | CHANGELOG |
-|---------|------------|--------------|--------------|
-| **SDK** | Node.js programmatic agent API and extension exports. | [`sdk/`](https://github.com/cline/cline/tree/main/sdk) | [CHANGELOG.md](https://github.com/cline/cline/blob/main/sdk/CHANGELOG.md) |
-| **CLI** | Terminal UI, headless mode, shell commands, and CLI-specific flows. | [`apps/cli/`](https://github.com/cline/cline/tree/main/apps/cli) | [CHANGELOG.md](https://github.com/cline/cline/blob/main/apps/cli/CHANGELOG.md) |
-| **VS Code Extension** | The Marketplace extension and extension host integration. | [`/`](https://github.com/cline/cline/tree/main) (WIP migrating) | [CHANGELOG.md](https://github.com/cline/cline/blob/main/CHANGELOG.md) |
-| **Desktop App** | Native macOS and Windows app (Tauri shell, Bun sidecar, Next.js UI). | [`apps/examples/desktop-app/`](https://github.com/cline/cline/tree/main/apps/examples/desktop-app) | [CHANGELOG.md](https://github.com/cline/cline/blob/main/apps/examples/desktop-app/CHANGELOG.md) |
-| **JetBrains Plugin** | JetBrains-hosted client that talks to the shared agent core. | Currently we are not open-sourcing JetBrains plugins | - |
-| **Docs site** | Public documentation pages. | [`docs/`](https://docs.cline.bot/) | - |
+前提: PC に **Cline desktop がインストール済みでサインイン済み**であること（https://cline.bot/desktop）。
 
-## Edits Code Across Your Project
-
-Cline reads your project structure, understands the relationships between files, and makes coordinated changes across your codebase. It monitors linter and compiler errors as it works, fixing issues like missing imports, type mismatches, and syntax errors before you even see them. In VS Code and JetBrains, every edit shows up as a diff you can review, modify, or revert. All changes are tracked with checkpoints, so you can easily undo the agent's work.
-
-## Runs Bash Commands
-
-Cline executes commands directly in your terminal and watches the output in real time. Install packages, run build scripts, execute tests, deploy applications, manage databases. For long-running processes like dev servers, Cline continues working in the background and reacts to new output as it appears, catching compile errors, test failures, and server crashes as they happen.
-
-## Plan and Act
-
-Toggle between Plan mode and Act mode. In Plan mode, Cline explores your codebase, asks clarifying questions, and lays out a strategy. Once you're aligned, switch to Act mode and Cline executes the plan. Every file edit and terminal command requires your approval, so you stay in control of what actually changes. Or toggle auto-approve and let Cline run autonomously.
-
-## Rules and Skills
-
-Define project-specific rules in `.clinerules` files that guide how Cline works in your codebase: coding standards, architecture conventions, deployment procedures, testing requirements. Rules are picked up automatically by the CLI, VS Code extension, and JetBrains plugin. Use skills to let the model load specific rules when needed.
-
-## Works With Every Model
-
-Cline is not locked to a single AI provider. Use whichever model fits your workflow:
-
-| Provider | Models |
-|----------|--------|
-| Anthropic | Claude Opus, Sonnet, Haiku |
-| OpenAI | GPT series models |
-| Google | Gemini series models |
-| OpenRouter | 200+ models from any provider |
-| Vercel AI Gateway | Route to many providers through one gateway |
-| AWS Bedrock | Claude, Llama, and more |
-| Azure / GCP Vertex | All hosted models |
-| Cerebras / Groq | Fast inference models |
-| Ollama / LM Studio | Run local models on your machine |
-| Any OpenAI-compatible API | Self-hosted or third-party endpoints |
-
-## Extend With Plugins or MCP Servers
-
-Extend Cline's capabilities with plugins. Using the SDK, register tools and lifecycle hooks programmatically through the plugin system for logging, auditing, policy enforcement, or adding domain-specific capabilities. Simple plugin example below.
-
-```typescript
-import { Agent, createTool } from "@cline/sdk"
-
-const deployTool = createTool({
-  name: "deploy",
-  description: "Deploy the current branch to staging.",
-  inputSchema: { type: "object", properties: { env: { type: "string" } }, required: ["env"] },
-  execute: async (input) => {
-    // your deployment logic
-  },
-})
-
-const agent = new Agent({ tools: [deployTool], /* ... */ })
-```
-...or use [MCPs](https://github.com/modelcontextprotocol) to connect to databases, query APIs, manage cloud infrastructure, and interact with external systems. Use [community-built servers](https://github.com/modelcontextprotocol/servers) or ask Cline to create custom tools on the fly. In the CLI, manage servers with `cline mcp`.
-
-## Multi-Agent Teams
-
-Coordinate multiple agents working together on complex tasks. A coordinator agent breaks the work into subtasks and delegates to specialist agents, each with their own tools and context. Team state persists across sessions so you can pick up where you left off.
-
-```bash
-cline --team-name auth-sprint "Plan and implement user authentication with tests"
+```cmd
+git clone https://github.com/nameko393-lab/cline-mobile.git cline-mobile
+cd cline-mobile
+install.cmd
 ```
 
-## Scheduled Agents
+`install.cmd` をダブルクリックすると:
 
-Run agents on cron schedules for recurring automations. Daily PR summaries, weekly dependency checks, codebase health reports. Schedules persist across restarts and run independently of any terminal session.
+| 手順 | 内容 | 確認 |
+|---|---|---|
+| 1 | git 検出（更新用） | 無いとき y/N |
+| 2 | Node 22+ 検出 | 無いとき y/N（winget） |
+| 3 | bun 1.4.2 検出 | 無いとき y/N（`npm install -g bun@1.4.2`） |
+| 4 | ビルド（`bun install` → `build:sdk` → `build:webview`）+ 注入 UI 層の再適用 | 自動 |
+| 5 | `apps\cline-hub\lan\config.json` 作成（既存は保持） | 自動 |
+| 6 | Cline desktop の hub record 確認 | 無いとき y/N |
+| 7 | ファイアウォール開放 / PATH 登録 / 起動 | すべて y/N |
 
-```bash
-cline schedule create "PR summary" \
-  --cron "0 9 * * MON-FRI" \
-  --prompt "List all open PRs and their review status" \
-  --workspace /path/to/repo
+- **インストールは必ず y/N 確認の後**に実行します（winget・npm・ファイアウォール・PATH）
+- 起動前に内容だけ確認する: `install.cmd check`
+- 非対話で流す: `set CLINE_INSTALL_DEFAULTS=1`（全質問を既定値 n で回答）+ `set CLINE_HUB_NO_PAUSE=1`
+- Cline desktop / PC hub には一切触れません
+
+導入後、コンソールに出る招待 URL をスマホで開くと操作できます（PC 自身は `http://localhost:8788/`）。
+
+```cmd
+apps\cline-hub\lan\start.cmd      :: 起動（スマホ 8787 + PC 8788、QR と招待 URL）
+apps\cline-hub\lan\stop.cmd       :: 停止（ダッシュボードのみ、desktop は無傷）
+apps\cline-hub\lan\start.cmd nobrowser
+powershell -ExecutionPolicy Bypass -File apps\cline-hub\lan\install-cli.ps1
+                                  :: 任意: cline-hub start / stop / status / doctor
 ```
 
-## Connect to Slack, Telegram, Discord, and More
+---
 
-Chat with your agent from any messaging platform: Telegram, Slack, Discord, Google Chat, WhatsApp, and Linear. Each conversation thread maps to an agent session with full context. Set up access control to restrict who can interact with your agent.
+## 仕組み
 
-```bash
-# Connect to Telegram
-cline connect telegram -k $BOT_TOKEN
-# Connect to Slack through webhook
-cline connect slack --bot-token $SLACK_TOKEN --signing-secret $SECRET --base-url $URL
-# Connect to Slack using socket mode
-cline connect slack --bot-token $SLACK_TOKEN --app-token $SLACK_APP_TOKEN
+```
+Cline desktop (cline-app.exe)
+   └─ hub デーモン code-sidecar.exe  →  ws://127.0.0.1:25463/hub
+        （~/.cline/data/locks/hub/production.json に pid / url を記録）
+                ▲ 同じ hub にクライアントとして接続
+                │
+cline-mobile ダッシュボード（スマホ 8787 / PC 8788）──スマホ（roomSecret 付き招待 URL）
 ```
 
-## Headless CLI for CI/CD
+- エージェントループ・ツール実行・LLM 呼び出しは **PC 側の Cline hub デーモン**で起きます
+- ダッシュボードは `session.create` / `run.start` / `approval.respond` を発行する**仲介のみ**（セッションを実行しません）
+- ランチャー（`apps/cline-hub/lan`）は cline のコードを import しない純粋なプロセス監視で、**パッチも一切ありません**
 
-Run Cline with zero interaction for scripting and automation. Pipe input, get JSON output, chain commands, integrate into CI/CD pipelines.
+## 前提
 
-```bash
-cline "Run tests and fix any failures"
-git diff origin/main | cline "Review these changes for issues"
-cline --json "List all TODO comments" | jq -r 'select(.type == "agent_event" and .event.text) | .event.text'
+| 項目 | 値 |
+|---|---|
+| OS | Windows（ファイアウォール設定は PowerShell） |
+| Node | 22 以上 |
+| bun | 1.4.2（`npm install -g bun@1.4.2`） |
+| Cline desktop | インストール済み・サインイン済み・**起動していること** |
+| スマホ | PC と同一 LAN の Wi-Fi |
+
+## 手動で導入する
+
+```cmd
+node -v
+npm install -g bun@1.4.2
+
+git clone https://github.com/nameko393-lab/cline-mobile.git cline-mobile
+cd cline-mobile
+bun install
+bun run build:sdk
+bun run -F @cline/cline-hub build:webview
+
+cd apps\cline-hub\lan
+copy config.example.json config.json
+bun lan-hub.mjs doctor              :: 全行 OK と hub record が出ることを確認
+bun lan-hub.mjs firewall --apply    :: UAC 昇格・TCP/8787 を LAN サブネット限定で許可
+start.cmd
 ```
 
-## Contributing
 
-Start with the [Contributing Guide](CONTRIBUTING.md). Join our [Discord](https://discord.gg/cline) and head to the `#contributors` channel to connect with other contributors. Check our [careers page](https://cline.bot/join-us) for full-time roles.
+## `config.json`（PC 固有・コミットしない）
 
-## License
+`config.example.json` をコピーして作ります（`install.cmd` が自動）。空欄は自動検出・既定値です。
 
-[Apache 2.0 © 2026 Cline Bot Inc.](./LICENSE)
+| キー | 既定 | 内容 |
+|---|---|---|
+| `repo` | 空 | cline チェックアウトのパス。空だと `apps/cline-hub/src/server.ts` を目印に自動検出 |
+| `port` / `localPort` | 8787 / 8788 | スマホ用 / PC 用ポート |
+| `host` | `0.0.0.0` | LAN バインド |
+| `workspaceRoot` | `~/cline-workspace` | スマホから新規セッションを作る既定フォルダ |
+| `publicHost` | 空 | 招待 URL に使う LAN IPv4（空で自動選択） |
+| `lanSkip` | `[]` | 対象外 NIC（例 `["172.27.176."]` = Hyper-V） |
+| `roomSecret` | 空 | 空だと初回起動時に自動生成して保存。**秘密なのでコミットしない** |
+
+## Cline desktop と共存させるための必須事項
+
+1. **desktop を起動してサインイン済み**にする（hub デーモンが `25463` で起動し lock が書かれる）。`doctor` の `hub record` 行に出なければ desktop を起動
+2. **`CLINE_BUILD_ENV=development` を設定しない**（設定すると dev hub `ws://127.0.0.1:25466/hub` に入り、desktop の本番 hub のセッションが見えない）
+3. hub record の capabilities に `session.create` / `session.run` / `stream.replay` が必要（desktop 側の SDK core が入れている）
+4. **desktop で作ったセッションにスマホから送ると `session not found`** になり得る → 自動で hub に読み込み直して送り直す（`src/webview/src/lib/session-recovery.ts`）。ただし**リストアはチェックポイントまで作業フォルダのファイルも巻き戻す**ので、スマホから送る前に PC 側でコミットしておく
+5. `stop.cmd` はダッシュボードだけを停止し、**desktop / PC hub には触れない**。desktop を終了すると hub record が消え、ターンは受け付けなくなる（desktop 再起動）
+6. desktop 側は無変更なので、スマホ用の挙動は**ダッシュボードのみに効く**
+
+## スマホ用の挙動（本家ダッシュボードとの違い）
+
+| 項目 | PC | スマホ | 実装 |
+|---|---|---|---|
+| Enter | **送信**（本家と同じ） | **改行**（送信は右下ボタン） | `src/webview/src/lib/composer-keyboard.ts` + `Composer.tsx`（`enterIsNewline: touchLayout`） |
+| Shift+Enter | 改行 | 改行 | 本家 |
+| IME 変換中の Enter | 変換確定（送信しない） | 変換確定 | 本家 |
+| 送信ボタン | 本体のアイコン（フッター右） | **右下固定**（送信中は「停止」で中止） | `Composer.tsx` + `index.css`（`.cline-phone-send`） |
+| 画面レイアウト | 通常 | 行折り返し・下部余白 40px・安全領域対応 | `index.css`（`@media (pointer: coarse)`）+ `viewport-fit=cover` |
+| 判定 | - | `matchMedia("(pointer: coarse)")` | `src/webview/src/lib/use-touch-layout.ts` |
+| 新規セッション / 削除確認 / 名前確定（スマホのみ） | 新規セッション・削除確認 | + 名前確定ボタン | 注入 UI 層 `lan/dashboard-ui.js`（composer には触らない） |
+
+検証: `bun run -F @cline/cline-hub test`（vitest） / `bun run -F @cline/cline-hub test:lan`（注入 UI 層）
+
+## 検証チェックリスト
+
+```cmd
+install.cmd check                      :: リポジトリ直下。環境レポート（何も変更しない）
+cd apps\cline-hub\lan
+bun lan-hub.mjs doctor                 :: 全行 OK（webview dist / sdk dist / hub record / firewall）
+bun lan-hub.mjs status
+bun run -F @cline/cline-hub test:lan
+bun run -F @cline/cline-hub test
+start /a http://localhost:8788/health
+```
+
+`doctor` が全行 OK なら稼働します（例: `hub record : ws://127.0.0.1:25463/hub pid=...`、`hub health : healthy`、`invite URL : http://<PC IP>:8787/?roomSecret=...`）。
+
+## 運用
+
+| 目的 | コマンド |
+|---|---|
+| 起動 / 停止 | `start.cmd` / `stop.cmd`（`cline-hub start` / `stop`） |
+| 反映（ダッシュボードはソース起動） | `bun lan-hub.mjs restart`（PC 用は `restart --local`） |
+| 状態 / 招待 URL / 診断 / ログ | `status` / `url`（`--qr`）/ `doctor` / `logs 60` |
+| ログファイル | `logs\dashboard.log`（スマホ用）・`logs\dashboard-local.log`（PC 用） |
+
+## 更新
+
+```cmd
+git pull product main
+bun install
+bun run build:sdk
+bun run -F @cline/cline-hub build:webview
+cd apps\cline-hub\lan
+bun lan-hub.mjs ui          :: build:webview が index.html を作り直すので注入 UI 層を再適用
+cline-hub restart
+```
+
+`build:webview` を忘れると「送信ボタンが無い / Enter で送信される」になります（`doctor` の `webview dist` 参照）。逆に `build:webview` を実行すると `dist/webview/index.html` が作り直されて注入が落ちるため、`bun lan-hub.mjs ui`（または `start`）で再適用します。注入 UI 層は `dist/webview/assets/` にコピーされ、`index.html` の `?v=` でキャッシュ無効化されるので、スマホは再読み込みで反映されます。
+
+## トラブル時
+
+| 症状 | 対処 |
+|---|---|
+| `bun が見つかりません` | `npm install -g bun@1.4.2` |
+| `Cline が見つかりません` | `config.json` の `repo` または `CLINE_REPO` |
+| `webview が未ビルド` / `sdk dist` 警告 | `bun run -F @cline/cline-hub build:webview` / `bun run build:sdk` |
+| `hub record` なし / `hub health` 失敗 | Cline desktop を起動してサインイン → 再 `doctor` |
+| セッション一覧が空 | dev hub に接続していないか確認（`CLINE_BUILD_ENV` を設定しない） |
+| `origin not allowed` | 招待 URL（`?roomSecret=`）で開く |
+| スマホが到達できない | `bun lan-hub.mjs firewall --apply` / AP のクライアント分離 / `publicHost` |
+| `session not found` | 自動で hub に読み込み直して送り直す。PC 側で編集したファイルは先にコミット |
+| 送信ボタンが無い / Enter で送信される（スマホ） | `bun run -F @cline/cline-hub build:webview` → `bun lan-hub.mjs ui` → `restart` → スマホ再読み込み |
+| 新規セッションボタン / 削除確認が出ない | `doctor` の `UI layer` を確認して `start`（または `bun lan-hub.mjs ui`）し直す |
+
+詳細は [apps/cline-hub/lan/README.md](apps/cline-hub/lan/README.md)（ランチャー詳細・制約・セキュリティ）と [apps/cline-hub/README.md](apps/cline-hub/README.md)（ダッシュボード本体）を参照。
+
+---
+
+## ライセンスと本家
+
+- このリポジトリの追加部分（LAN ランチャー / 注入 UI 層 / ダッシュボードのスマホ向け調整）: **Apache License 2.0**（[LICENSE](LICENSE)）
+- 土台の Cline 本体とダッシュボード: [cline/cline](https://github.com/cline/cline) の **Apache License 2.0** のまま
+- 本家 README: https://github.com/cline/cline/blob/main/README.md ／ 本家 docs: https://docs.cline.bot
+- 実行には PC 側で起動している Cline desktop / Cline Hub が必要です（このリポジトリ単独ではエージェントが動きません）

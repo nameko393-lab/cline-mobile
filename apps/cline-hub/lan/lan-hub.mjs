@@ -797,6 +797,17 @@ async function main() {
 		case "firewall":
 			process.exitCode = commandFirewall(config, rest.includes("--apply"));
 			break;
+		case "ui": {
+			// Re-apply (or remove) the injected dashboard layer without restarting.
+			// build:webview regenerates dist/webview/index.html, which drops the
+			// injection, so this is what you run after a rebuild.
+			info(
+				rest.includes("--remove")
+					? uninstallPhoneUi(config)
+					: installPhoneUi(config),
+			);
+			break;
+		}
 		case "logs": {
 			const n = Number.parseInt(rest[0] ?? "40", 10);
 			process.exitCode = commandLogs(Number.isFinite(n) ? n : 40);
@@ -804,10 +815,11 @@ async function main() {
 		}
 		default:
 			info(
-				"使い方: bun lan-hub.mjs <start|local|stop [--local]|restart [--local]|status|url|doctor|firewall [--apply]|logs [行数]>",
+				"使い方: bun lan-hub.mjs <start|local|stop [--local]|restart [--local]|status|url|doctor|firewall [--apply]|ui [--remove]|logs [行数]>",
 			);
 			info("  start  … スマホ用（0.0.0.0、roomSecret 必須）");
 			info("  local  … PC ブラウザ用（127.0.0.1、roomSecret 不要）");
+			info("  ui     … 注入 UI 層を再導入（build:webview 後はこれが必要）");
 			process.exitCode = 2;
 	}
 }

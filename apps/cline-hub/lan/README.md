@@ -28,8 +28,11 @@ bun install              # ルートで bun install を実行済みなら qrcode
 .\start.cmd              # ダブルクリックでも可（LAN 8787 + PC 8788）
 .\stop.cmd
 bun lan-hub.mjs doctor
+bun lan-hub.mjs ui       # build:webview 後に注入 UI 層を再適用（index.html を作り直すため）
 bun run -F @cline/cline-hub test:lan   # ランチャー単体のテスト
 ```
+
+1 クリックで導入する場合はリポジトリ直下の `install.cmd` を使います（検出・確認プロンプト・ビルド・設定作成までを一括）。手順の詳細はルートの [README.md](../../README.md) を参照。
 
 `repo` 指定は省略できます。この位置から親方向へ `apps/cline-hub/src/server.ts` を目印に
 自動検出します。
@@ -138,6 +141,7 @@ bun lan-hub.mjs restart [--local]
 bun lan-hub.mjs status
 bun lan-hub.mjs url                :: 招待 URL（1 行目）+ QR
 bun lan-hub.mjs doctor
+bun lan-hub.mjs ui [--remove]      :: 注入 UI 層の再導入 / 解除（build:webview で index.html が作り直されるため再導入が必要）
 bun lan-hub.mjs firewall --apply   :: 管理者 UAC プロンプトあり（TCP/8787 を LAN 限定で許可）
 bun lan-hub.mjs logs [行数]
 ```
