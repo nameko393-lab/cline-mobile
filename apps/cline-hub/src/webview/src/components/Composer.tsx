@@ -8,7 +8,7 @@ import {
 	SignalLow,
 	SignalMedium,
 } from "lucide-react";
-import { useState } from "react";
+import { type KeyboardEvent, useState } from "react";
 import { toast } from "sonner";
 import {
 	Attachment,
@@ -54,6 +54,11 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+	insertNewlineAtCursor,
+	resolveEnterAction,
+} from "@/lib/composer-keyboard";
+import { useTouchLayout } from "@/lib/use-touch-layout";
 import type {
 	WebviewChatAttachments,
 	WebviewOutboundMessage,
@@ -374,6 +379,37 @@ export function Composer({
 		0,
 	);
 	const ReasonIcon = reasonLevels[reasonLevelOption].icon;
+	const touchLayout = useTouchLayout();
+
+	/**
+	 * Enter inserts a newline and sending goes through the send button.
+	 * `PromptInputTextarea` calls this handler before its own submit-on-Enter
+	 * logic and skips that logic when the default is prevented, so the phone's
+	 * on-screen keyboard can never eat a multi-line prompt.
+	 */
+	const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+		const action = resolveEnterAction({
+			enterIsNewline: true,
+			isComposing: event.nativeEvent.isComposing,
+			key: event.key,
+			keyCode: event.nativeEvent.keyCode,
+			shiftKey: event.shiftKey,
+		});
+		if (action !== "newline") {
+			return;
+		}
+		event.preventDefault();
+		const textarea = event.currentTarget;
+		const next = insertNewlineAtCursor(
+			textarea.value,
+			textarea.selectionStart,
+			textarea.selectionEnd,
+		);
+		controller.textInput.setInput(next.value);
+		requestAnimationFrame(() => {
+			textarea.setSelectionRange(next.caret, next.caret);
+		});
+	};
 
 	return (
 		<div className="border-t bg-background">
@@ -430,9 +466,13 @@ export function Composer({
 						placeholder="Type @ for context and / for skills"
 						value={controller.textInput.value}
 						className="text-sm outline-none ring-0"
+						onKeyDown={handleComposerKeyDown}
 					/>
 				</PromptInputBody>
-				<PromptInputFooter className="flex-col items-stretch gap-1 px-0">
+				<PromptInputFooter
+					className="flex-col items-stretch gap-1 px-0"
+					data-composer-footer
+				>
 					{settingsOpen ? (
 						<ComposerSettings
 							autoApproveTools={autoApproveTools}
@@ -458,7 +498,7 @@ export function Composer({
 							workspaceRoot={workspaceRoot}
 						/>
 					) : null}
-					<div className="flex items-center justify-between gap-3">
+					<div className="flex flex-wrap items-center justify-between gap-3">
 						<PromptInputTools className="shrink-0">
 							<PromptInputButton
 								disabled={disabled}
@@ -518,10 +558,11 @@ export function Composer({
 						<div className="flex items-center gap-2">
 							{sending ? (
 								<Button onClick={onAbort} type="button" variant="destructive">
-									Abort
+									{touchLayout ? "Stop" : "Abort"}
 								</Button>
 							) : null}
 							<PromptInputSubmit
+								className="shrink-0"
 								disabled={disabled || status.includes("Failed")}
 								status={sending ? "submitted" : "ready"}
 								variant="ghost"

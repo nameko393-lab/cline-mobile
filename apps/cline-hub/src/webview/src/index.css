@@ -238,3 +238,35 @@
 	--sidebar-border: oklch(1 0 0 / 10%);
 	--sidebar-ring: oklch(0.556 0 0);
 }
+
+/* Phone / touch layout for the hub dashboard.
+ *
+ * The dashboard is opened on phones over the LAN, where the on-screen keyboard
+ * covers the composer. Keep the page from scrolling sideways, keep the composer
+ * footer inside the visual viewport (including the home-indicator inset), and
+ * keep tap targets thumb-sized. Keyboard semantics live in
+ * lib/composer-keyboard.ts, not here.
+ */
+@media (pointer: coarse) {
+	html,
+	body {
+		overflow-x: hidden;
+	}
+
+	/* iOS zooms the whole page when a focused input is below 16px. */
+	textarea[name="message"] {
+		font-size: 16px;
+	}
+
+	[data-composer-footer] {
+		flex-wrap: wrap;
+		padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+	}
+
+	[data-composer-footer] [data-slot="button"] {
+		min-height: 2.75rem;
+		min-width: 2.75rem;
+		white-space: nowrap;
+	}
+}
+
