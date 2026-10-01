@@ -1,0 +1,495 @@
+/*
+ * Cline Hub LAN launcher — dashboard UI layer.
+ *
+ * Injected into the dashboard's BUILD OUTPUT by start.cmd and removed again by
+ * stop.cmd, so Cline's own source stays untouched.
+ *
+ * Four things the stock dashboard does not offer:
+ *   1. The Sessions tab has no way to start a new session.
+ *   2. The session title input has no confirm button — the rename only lands
+ *      on Enter, which mobile keyboards do not offer reliably.
+ *   3. The trash button in the chat header deletes a session immediately,
+ *      with no confirmation.
+ *   4. The composer submits on Enter, which sends a half-typed prompt by
+ *      accident (a Windows path like C:\temp\log stops at the first colon).
+ *      Enter is remapped to a newline and sending moves to a 送信 button.
+ *
+ * All three are driven from the outside: the new-session button uses the
+ * dashboard's own routing (the same pushState + popstate the app itself uses),
+ * the rename button replays the Enter keydown the app commits on, and the
+ * delete guard intercepts the click in the capture phase, so React never sees
+ * it until the user confirms.
+ *
+ * Theme colors come from the dashboard's own CSS variables, which hold oklch()
+ * values. They must be used as colors directly — wrapping them in hsl() yields
+ * an invalid color and the element renders transparent.
+ */
+(function () {
+	"use strict";
+
+	const STYLE_ID = "cline-lan-dashboard-ui-css";
+	const NEW_BUTTON_ID = "cline-lan-dashboard-ui-new-session";
+	const RENAME_BUTTON_ID = "cline-lan-dashboard-ui-rename-confirm";
+	const TITLE_INPUT_SELECTOR = 'input[placeholder="Session title"]';
+	const DIALOG_ID = "cline-lan-dashboard-ui-confirm";
+	const CONFIRMED_FLAG = "clineLanDeleteConfirmed";
+	const SESSIONS_TITLE = "Sessions";
+	const DELETE_LABEL = "Delete session";
+	const CHAT_PATH = "/chat";
+	const CHAT_SESSION_QUERY_PARAM = "id";
+	const COMPOSER_SELECTOR = "form textarea";
+	const SEND_BUTTON_ID = "cline-lan-dashboard-ui-send";
+	const SEND_BUTTON_CLASS = "cline-lan-send";
+	const COMPOSER_MARK = "clineLanDashboardUiComposer";
+	// The phone layer owns the composer on touch screens; duplicating the
+	// newline handler there would insert two newlines per Enter.
+	const PHONE_MARK = "clineLanPhoneUi";
+	const PHONE_SEND_BUTTON_ID = "cline-lan-phone-ui-send";
+
+	function ensureStyle() {
+		if (document.getElementById(STYLE_ID)) return;
+		const style = document.createElement("style");
+		style.id = STYLE_ID;
+		style.textContent = [
+			".cline-lan-new-session {",
+			"	align-items: center;",
+			"	background: var(--primary, #1f1f23);",
+			"	border: 1px solid var(--border, #d4d4d4);",
+			"	border-radius: var(--radius, 0.5rem);",
+			"	color: var(--primary-foreground, #ffffff);",
+			"	cursor: pointer;",
+			"	display: inline-flex;",
+			"	font: 500 14px/1.2 ui-sans-serif, system-ui, sans-serif;",
+			"	min-height: 36px;",
+			"	padding: 0 16px;",
+			"}",
+			".cline-lan-new-session:hover { opacity: 0.88; }",
+			".cline-lan-rename-confirm {",
+			"	align-items: center;",
+			"	background: var(--primary, #1f1f23);",
+			"	border: 1px solid var(--border, #d4d4d4);",
+			"	border-radius: var(--radius, 0.5rem);",
+			"	color: var(--primary-foreground, #ffffff);",
+			"	cursor: pointer;",
+			"	display: inline-flex;",
+			"	flex: 0 0 auto;",
+			"	font: 500 12px/1.2 ui-sans-serif, system-ui, sans-serif;",
+			"	min-height: 26px;",
+			"	padding: 0 10px;",
+			"	white-space: nowrap;",
+			"}",
+			".cline-lan-rename-confirm:hover { opacity: 0.88; }",
+			".cline-lan-confirm {",
+			"	align-items: center;",
+			"	background: rgba(0, 0, 0, 0.6);",
+			"	display: flex;",
+			"	inset: 0;",
+			"	justify-content: center;",
+			"	position: fixed;",
+			"	z-index: 2147483000;",
+			"}",
+			".cline-lan-confirm-card {",
+			"	background: var(--background, #ffffff);",
+			"	border: 1px solid var(--border, #d4d4d4);",
+			"	border-radius: var(--radius, 0.5rem);",
+			"	box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);",
+			"	color: var(--foreground, #1a1a1a);",
+			"	max-width: 26rem;",
+			"	padding: 20px;",
+			"	width: min(26rem, calc(100vw - 32px));",
+			"}",
+			".cline-lan-confirm-title { font-size: 16px; font-weight: 600; margin: 0; }",
+			".cline-lan-confirm-body {",
+			"	color: var(--muted-foreground, #666666);",
+			"	font-size: 14px;",
+			"	line-height: 1.5;",
+			"	margin: 10px 0 0;",
+			"	overflow-wrap: anywhere;",
+			"}",
+			".cline-lan-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }",
+			".cline-lan-confirm-actions button {",
+			"	border: 1px solid var(--border, #d4d4d4);",
+			"	border-radius: var(--radius, 0.5rem);",
+			"	cursor: pointer;",
+			"	font: 500 14px/1.2 ui-sans-serif, system-ui, sans-serif;",
+			"	min-height: 36px;",
+			"	padding: 0 14px;",
+			"}",
+			".cline-lan-confirm-cancel {",
+			"	background: var(--secondary, var(--muted, #f0f0f0));",
+			"	color: var(--foreground, #1a1a1a);",
+			"}",
+			".cline-lan-confirm-delete {",
+			"	background: var(--destructive, #cc3333);",
+			"	color: var(--destructive-foreground, #ffffff);",
+			"}",
+			".cline-lan-send {",
+			"\\talign-items: center;",
+			"\\tbackground: var(--primary, #1f1f23);",
+			"\\tborder: 1px solid var(--border, #d4d4d4);",
+			"\\tborder-radius: var(--radius, 0.5rem);",
+			"\\tcolor: var(--primary-foreground, #ffffff);",
+			"\\tcursor: pointer;",
+			"\\tdisplay: inline-flex;",
+			"\\tflex: 0 0 auto;",
+			"\\tfont: 500 13px/1.2 ui-sans-serif, system-ui, sans-serif;",
+			"\\tmargin-left: 6px;",
+			"\\tmin-height: 30px;",
+			"\\tpadding: 0 12px;",
+			"\\twhite-space: nowrap;",
+			"}",
+			".cline-lan-send:hover { opacity: 0.88; }",
+			".cline-lan-send:disabled { cursor: default; opacity: 0.45; }",
+			/* A narrow window must not push the send button past the right edge:
+			 * the composer footer row wraps onto a second line instead. */
+			"form:has(textarea) div:has(> button[type=\"submit\"]) { flex-wrap: wrap; }",
+			".cline-lan-send[data-generating=\"1\"] {",
+			"\\tbackground: var(--destructive, #cc3333);",
+			"\\tcolor: var(--destructive-foreground, #ffffff);",
+			"}",
+
+		].join("\n");
+		document.head.appendChild(style);
+	}
+
+	function closeDialog(dialog) {
+		if (dialog && dialog.parentNode) dialog.parentNode.removeChild(dialog);
+		if (dialog && dialog.keyHandler) document.removeEventListener("keydown", dialog.keyHandler);
+	}
+
+	function openDeleteDialog(button) {
+		const open = document.getElementById(DIALOG_ID);
+		if (open) closeDialog(open);
+
+		const titleInput = document.querySelector(TITLE_INPUT_SELECTOR);
+		const sessionTitle = titleInput && titleInput.value ? titleInput.value.trim() : "";
+
+		const dialog = document.createElement("div");
+		dialog.id = DIALOG_ID;
+		dialog.className = "cline-lan-confirm";
+
+		const card = document.createElement("div");
+		card.className = "cline-lan-confirm-card";
+		card.setAttribute("role", "alertdialog");
+		card.setAttribute("aria-modal", "true");
+
+		const title = document.createElement("p");
+		title.className = "cline-lan-confirm-title";
+		title.textContent = "セッションを削除しますか？";
+
+		const body = document.createElement("p");
+		body.className = "cline-lan-confirm-body";
+		body.textContent = sessionTitle
+			? `「${sessionTitle}」を削除します。この操作は取り消せません。`
+			: "このセッションを削除します。この操作は取り消せません。";
+
+		const actions = document.createElement("div");
+		actions.className = "cline-lan-confirm-actions";
+
+		const cancel = document.createElement("button");
+		cancel.type = "button";
+		cancel.className = "cline-lan-confirm-cancel";
+		cancel.textContent = "キャンセル";
+
+		const remove = document.createElement("button");
+		remove.type = "button";
+		remove.className = "cline-lan-confirm-delete";
+		remove.textContent = "削除";
+
+		actions.appendChild(cancel);
+		actions.appendChild(remove);
+		card.appendChild(title);
+		card.appendChild(body);
+		card.appendChild(actions);
+		dialog.appendChild(card);
+		document.body.appendChild(dialog);
+
+		const dismiss = () => closeDialog(dialog);
+		dialog.keyHandler = (event) => {
+			if (event.key === "Escape") dismiss();
+		};
+		document.addEventListener("keydown", dialog.keyHandler);
+
+		dialog.addEventListener("click", (event) => {
+			if (event.target === dialog) dismiss();
+		});
+		cancel.addEventListener("click", (event) => {
+			event.stopPropagation();
+			dismiss();
+		});
+		remove.addEventListener("click", (event) => {
+			event.stopPropagation();
+			dismiss();
+			// Mark the button so the capture guard below lets this click through.
+			button.dataset[CONFIRMED_FLAG] = "1";
+			button.click();
+		});
+		if (typeof cancel.focus === "function") cancel.focus();
+	}
+
+	function deleteButtonFor(target) {
+		const button = target && target.closest ? target.closest("button") : null;
+		if (!button) return null;
+		const label = button.querySelector(".sr-only");
+		if (!label) return null;
+		return (label.textContent || "").trim() === DELETE_LABEL ? button : null;
+	}
+
+	function guardDeleteClicks() {
+		document.addEventListener(
+			"click",
+			(event) => {
+				const button = deleteButtonFor(event.target);
+				if (!button) return;
+				if (button.dataset[CONFIRMED_FLAG] === "1") {
+					delete button.dataset[CONFIRMED_FLAG];
+					return;
+				}
+				// React attaches its listeners to the root container, so stopping
+				// the capture phase here keeps the delete from running at all.
+				event.preventDefault();
+				event.stopPropagation();
+				openDeleteDialog(button);
+			},
+			true,
+		);
+	}
+
+	/** The Sessions tab header, found by its "Sessions" heading. */
+	function sessionsHeader() {
+		const headings = document.querySelectorAll("h1");
+		for (const heading of headings) {
+			if ((heading.textContent || "").trim() !== SESSIONS_TITLE) continue;
+			if (heading.closest) {
+				const section = heading.closest("section");
+				if (section) return section;
+			}
+			return heading.parentElement;
+		}
+		return null;
+	}
+
+	/** Mirrors the dashboard's own chatPath(): keep the query, drop the session id. */
+	function newSessionPath() {
+		const params = new URLSearchParams(window.location.search);
+		params.delete(CHAT_SESSION_QUERY_PARAM);
+		const query = params.toString();
+		return query ? `${CHAT_PATH}?${query}` : CHAT_PATH;
+	}
+
+	function startNewSession() {
+		window.history.pushState(null, "", newSessionPath());
+		window.dispatchEvent(new PopStateEvent("popstate"));
+	}
+
+	/**
+	 * The dashboard commits a renamed session on an Enter keydown (and on blur),
+	 * so the confirm button replays that keydown instead of writing the title
+	 * through a path of its own.
+	 *
+	 * The input must not be focused here: its own onFocus resets the draft to the
+	 * saved title, which drops what the user typed and makes the commit a no-op.
+	 */
+	function commitTitle(input) {
+		input.dispatchEvent(
+			new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+		);
+		// Tapping the button blurs the input, and the dashboard commits on blur.
+		// Blur only when it is still focused so that path is not fired twice.
+		if (document.activeElement === input && typeof input.blur === "function") {
+			input.blur();
+		}
+	}
+
+	function syncRenameButton() {
+		const input = document.querySelector(TITLE_INPUT_SELECTOR);
+		const existing = document.getElementById(RENAME_BUTTON_ID);
+		if (!input || !input.parentNode) {
+			if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+			return;
+		}
+		if (existing && existing.parentNode === input.parentNode) return;
+		if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+		const button = document.createElement("button");
+		button.id = RENAME_BUTTON_ID;
+		button.type = "button";
+		button.className = "cline-lan-rename-confirm";
+		button.textContent = "確定";
+		button.addEventListener("click", (event) => {
+			event.preventDefault();
+			commitTitle(input);
+		});
+		input.parentNode.insertBefore(button, input.nextSibling);
+	}
+
+	function syncNewSessionButton() {
+		const section = sessionsHeader();
+		const existing = document.getElementById(NEW_BUTTON_ID);
+		if (!section) {
+			if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+			return;
+		}
+		if (existing && existing.parentNode === section) return;
+		if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+		const button = document.createElement("button");
+		button.id = NEW_BUTTON_ID;
+		button.type = "button";
+		button.className = "cline-lan-new-session";
+		button.textContent = "新規セッション";
+		button.addEventListener("click", startNewSession);
+		section.appendChild(button);
+	}
+
+	/* ------------------------------ composer keys ---------------------------- */
+	/*
+	 * The stock composer submits on Enter. That sends half-typed prompts by
+	 * accident — a Windows path like C:\temp\log stops at the first colon — so
+	 * Enter is remapped to a newline and sending moves to the 送信 button.
+	 *
+	 * The listener is registered in the capture phase on the textarea itself.
+	 * React delegates its key handler to the root container, so stopping
+	 * propagation at the textarea means the app's "Enter submits" handler never
+	 * runs. Shift+Enter and IME composition are left to the browser.
+	 */
+	function findComposer() {
+		const textarea = document.querySelector(COMPOSER_SELECTOR);
+		if (!textarea) return null;
+		const form = textarea.closest ? textarea.closest("form") : null;
+		return form ? { textarea, form } : null;
+	}
+
+	function findSubmit(form) {
+		if (!form) return null;
+		return (
+			form.querySelector('button[type="submit"]') ??
+			form.querySelector('button[aria-label="Submit"], button[aria-label="Stop"]') ??
+			null
+		);
+	}
+
+	/** The phone layer owns the composer on touch screens; skip its textarea. */
+	function phoneOwnsComposer(textarea) {
+		if (textarea.dataset[PHONE_MARK]) return true;
+		return Boolean(document.getElementById(PHONE_SEND_BUTTON_ID));
+	}
+
+	/**
+	 * Phone-shaped viewport (touch screen or a narrow window). The phone layer
+	 * puts a floating send button at the bottom-right there; an inline button in
+	 * the composer footer would overflow the narrow row and land past the right
+	 * edge, where it cannot be pressed.
+	 */
+	function isPhoneViewport() {
+		if (typeof window.matchMedia !== "function") return false;
+		return (
+			window.matchMedia("(pointer: coarse)").matches ||
+			window.matchMedia("(max-width: 820px)").matches
+		);
+	}
+
+	/** Insert a newline at the caret in a way React's onChange picks up. */
+	function insertNewline(textarea) {
+		const start = textarea.selectionStart ?? textarea.value.length;
+		const end = textarea.selectionEnd ?? textarea.value.length;
+		if (typeof textarea.focus === "function") textarea.focus();
+		// execCommand fires a real input event, so React state stays in sync.
+		try {
+			if (document.execCommand("insertText", false, "\n")) return;
+		} catch {}
+		const next = `${textarea.value.slice(0, start)}\n${textarea.value.slice(end)}`;
+		const proto = typeof HTMLTextAreaElement === "function" ? HTMLTextAreaElement.prototype : null;
+		const setter = proto ? Object.getOwnPropertyDescriptor(proto, "value")?.set : null;
+		if (setter) setter.call(textarea, next);
+		else textarea.value = next;
+		textarea.selectionStart = textarea.selectionEnd = start + 1;
+		textarea.dispatchEvent(new Event("input", { bubbles: true }));
+	}
+
+	function onComposerKeydown(event) {
+		if (event.key !== "Enter" || event.shiftKey) return;
+		if (event.isComposing || (event.nativeEvent && event.nativeEvent.isComposing)) return;
+		event.preventDefault();
+		event.stopPropagation();
+		insertNewline(event.currentTarget);
+	}
+
+	function syncSendButton() {
+		const dropButton = () => {
+			const stale = document.getElementById(SEND_BUTTON_ID);
+			if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+		};
+
+		const found = findComposer();
+		if (!found || isPhoneViewport() || phoneOwnsComposer(found.textarea)) {
+			dropButton();
+			return;
+		}
+		const { textarea, form } = found;
+
+		if (!textarea.dataset[COMPOSER_MARK]) {
+			textarea.dataset[COMPOSER_MARK] = "1";
+			textarea.addEventListener("keydown", onComposerKeydown, true);
+			console.info("[cline-lan-dashboard-ui] Enter is now newline; use the send button to submit");
+		}
+
+		let button = document.getElementById(SEND_BUTTON_ID);
+		if (button && button.parentNode !== form) {
+			if (button.parentNode) button.parentNode.removeChild(button);
+			button = null;
+		}
+		if (!button) {
+			button = document.createElement("button");
+			button.id = SEND_BUTTON_ID;
+			button.type = "button";
+			button.className = SEND_BUTTON_CLASS;
+			button.addEventListener("click", (event) => {
+				event.preventDefault();
+				const current = findSubmit(findComposer()?.form ?? form);
+				if (current && current.disabled !== true) current.click();
+			});
+			const anchor = findSubmit(form);
+			if (anchor && anchor.parentNode === form) form.insertBefore(button, anchor.nextSibling);
+			else form.appendChild(button);
+		}
+
+		const submit = findSubmit(form);
+		const generating = Boolean(submit && submit.getAttribute("aria-label") === "Stop");
+		button.dataset.generating = generating ? "1" : "0";
+		button.textContent = generating ? "停止" : "送信";
+		button.setAttribute("aria-label", generating ? "Stop" : "Send");
+		button.disabled = !submit || submit.disabled === true;
+	}
+
+
+	function sync() {
+		syncNewSessionButton();
+		syncRenameButton();
+		syncSendButton();
+	}
+
+	function boot() {
+		ensureStyle();
+		guardDeleteClicks();
+		sync();
+		if (typeof MutationObserver === "function") {
+			new MutationObserver(() => sync()).observe(document.body, {
+				childList: true,
+				subtree: true,
+			});
+		}
+		setInterval(sync, 500);
+		console.info(
+			"[cline-lan-dashboard-ui] new-session + rename confirm + delete confirm + composer send installed",
+		);
+	}
+
+	if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", boot);
+	} else {
+		boot();
+	}
+})();
+
+

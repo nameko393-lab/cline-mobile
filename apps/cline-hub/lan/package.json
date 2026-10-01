@@ -1,0 +1,24 @@
+{
+	"name": "cline-hub-lan",
+	"private": true,
+	"version": "1.0.0",
+	"description": "LAN launcher for the official Cline Hub dashboard (phone-operable).",
+	"license": "Apache-2.0",
+	"engines": {
+		"bun": ">=1.4.2",
+		"node": ">=22"
+	},
+	"type": "module",
+	"scripts": {
+		"start": "bun lan-hub.mjs start",
+		"stop": "bun lan-hub.mjs stop",
+		"status": "bun lan-hub.mjs status",
+		"doctor": "bun lan-hub.mjs doctor",
+		"test": "node phone-ui.test.mjs && node dashboard-ui.test.mjs",
+		"url": "bun lan-hub.mjs url",
+		"firewall": "bun lan-hub.mjs firewall --apply"
+	},
+	"dependencies": {
+		"qrcode": "^1.5.4"
+	}
+}

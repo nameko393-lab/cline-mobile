@@ -1,0 +1,10 @@
+# Per-machine config and runtime state.
+config.json
+logs/
+run/
+node_modules/
+bun.lock
+
+
+# Scratch output from ad-hoc runs.
+*.txt

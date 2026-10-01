@@ -1,0 +1,11 @@
+{
+	"repo": "",
+	"port": 8787,
+	"localPort": 8788,
+	"host": "0.0.0.0",
+	"workspaceRoot": "",
+	"publicHost": "",
+	"lanSkip": [],
+	"phoneRestore": true,
+	"roomSecret": ""
+}

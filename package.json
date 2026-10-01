@@ -7,6 +7,7 @@
         "apps/vscode/webview-ui",
         "apps/vscode/testing-platform",
         "apps/cline-hub/src/webview",
+        "apps/cline-hub/lan",
         "apps/examples/*",
         "apps/examples/vscode/src/webview",
         "sdk/examples",
