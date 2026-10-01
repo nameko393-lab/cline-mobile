@@ -46,6 +46,36 @@
 	const PHONE_MARK = "clineLanPhoneUi";
 	const PHONE_SEND_BUTTON_ID = "cline-lan-phone-ui-send";
 
+	/*
+	 * Every write below must be conditional. The MutationObserver installed in
+	 * boot() calls sync() on any childList change in the document, and assigning
+	 * textContent replaces the child list even when the string is identical -
+	 * so an unconditional write re-triggers the observer, which calls sync
+	 * again, which writes again. With a composer on screen (the chat view) that
+	 * loop pegs the main thread and the whole dashboard stops responding.
+	 */
+	function setText(element, text) {
+		if (element.textContent !== text) element.textContent = text;
+	}
+	function setAttribute(element, name, value) {
+		if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+	}
+	function setData(element, key, value) {
+		if (element.dataset[key] !== value) element.dataset[key] = value;
+	}
+	function setDisabled(element, disabled) {
+		if (element.disabled !== disabled) element.disabled = disabled;
+	}
+
+	/** Nodes this layer owns, used to ignore our own mutations. */
+	function isOurNode(node) {
+		const element = node && node.nodeType === 1 ? node : node && node.parentElement;
+		if (!element) return false;
+		if ((element.id || "").indexOf("cline-lan-dashboard-ui") === 0) return true;
+		if (element.id === STYLE_ID) return true;
+		return Array.from(element.classList || []).some((name) => name.indexOf("cline-lan-") === 0);
+	}
+
 	function ensureStyle() {
 		if (document.getElementById(STYLE_ID)) return;
 		const style = document.createElement("style");
@@ -456,10 +486,10 @@
 
 		const submit = findSubmit(form);
 		const generating = Boolean(submit && submit.getAttribute("aria-label") === "Stop");
-		button.dataset.generating = generating ? "1" : "0";
-		button.textContent = generating ? "停止" : "送信";
-		button.setAttribute("aria-label", generating ? "Stop" : "Send");
-		button.disabled = !submit || submit.disabled === true;
+		setData(button, "generating", generating ? "1" : "0");
+		setText(button, generating ? "停止" : "送信");
+		setAttribute(button, "aria-label", generating ? "Stop" : "Send");
+		setDisabled(button, !submit || submit.disabled === true);
 	}
 
 
@@ -474,7 +504,12 @@
 		guardDeleteClicks();
 		sync();
 		if (typeof MutationObserver === "function") {
-			new MutationObserver(() => sync()).observe(document.body, {
+			new MutationObserver((records) => {
+				// Mutations that only touch nodes this layer owns are our own.
+				// Reacting to them is what turned sync into a self-feeding loop.
+				if (records.length && records.every((record) => isOurNode(record.target))) return;
+				sync();
+			}).observe(document.body, {
 				childList: true,
 				subtree: true,
 			});
