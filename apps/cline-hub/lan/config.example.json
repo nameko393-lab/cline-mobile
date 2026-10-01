@@ -6,6 +6,5 @@
 	"workspaceRoot": "",
 	"publicHost": "",
 	"lanSkip": [],
-	"phoneRestore": true,
 	"roomSecret": ""
 }

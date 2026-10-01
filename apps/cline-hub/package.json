@@ -13,7 +13,7 @@
 		"start": "bun run src/server.ts",
 		"smoke:options": "bun run src/validate-options.ts",
 		"test": "bunx vitest run --config vitest.config.ts",
-		"test:lan": "node lan/phone-ui.test.mjs && node lan/dashboard-ui.test.mjs",
+		"test:lan": "node lan/dashboard-ui.test.mjs",
 		"typecheck": "bun tsc -p tsconfig.json --noEmit"
 	},
 	"dependencies": {

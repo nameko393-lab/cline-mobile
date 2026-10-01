@@ -199,7 +199,10 @@ function readHubRecord() {
 function findBun() {
 	// process.execPath only counts when it really is bun: running this launcher
 	// with `node lan-hub.mjs` must not hand node.exe to `spawn(..., ["run", ...])`.
-	const isBun = (path) => basename(path ?? "").toLowerCase().startsWith("bun");
+	const isBun = (path) =>
+		basename(path ?? "")
+			.toLowerCase()
+			.startsWith("bun");
 	const candidates = [
 		isBun(process.execPath) ? process.execPath : "",
 		join(
@@ -345,31 +348,30 @@ async function printQr(text) {
 	}
 }
 
-// --- phone UI layer -------------------------------------------------------
-// The launcher writes two files into the dashboard's BUILD OUTPUT
-// (apps/cline-hub/dist/webview, which is gitignored) and removes them again on
-// stop. Cline's tracked source is never modified, so the phone behaviour lives
-// entirely inside this launcher.
+// --- dashboard UI layer -----------------------------------------------------
+// The launcher writes one file into the dashboard's BUILD OUTPUT
+// (apps/cline-hub/dist/webview, which is gitignored) and removes it again on
+// stop. Cline's tracked source is never modified.
+//
+// The phone experience itself lives in the dashboard source now
+// (src/webview/src/lib/composer-keyboard.ts, use-touch-layout.ts,
+// session-recovery.ts and the coarse-pointer rules in index.css), so this layer
+// only carries the dashboard conveniences that are not in Cline yet: the new
+// session button, rename confirm, delete confirm and the desktop send button.
 // The dashboard only serves static files without the roomSecret gate under
 // /assets/ (see apps/cline-hub/src/server.ts isPublicStaticAssetPath), so the
-// phone layer has to live there — a browser subresource request carries no
-// Origin header and would be rejected anywhere else.
-const PHONE_UI_FILENAME = "cline-lan-phone-ui.js";
+// layer has to live there — a browser subresource request carries no Origin
+// header and would be rejected anywhere else.
 const DASH_UI_FILENAME = "cline-lan-dashboard-ui.js";
-const UI_FILENAMES = [PHONE_UI_FILENAME, DASH_UI_FILENAME];
+const UI_FILENAMES = [DASH_UI_FILENAME];
 
 /**
  * Options for the injected tag's query string.
- * `phoneRestore: false` (config) or CLINE_HUB_PHONE_RESTORE=0 disables the
- * checkpoint-restore recovery, leaving only the same-folder fallback.
  * `v=` is the injected file's stamp: browsers cache these scripts, and without
- * it a phone keeps running the previous layer after start has re-injected one.
+ * it a browser keeps running the previous layer after start has re-injected one.
  */
 function uiTag(filename, config) {
-	const restoreEnabled =
-		config.phoneRestore !== false && process.env.CLINE_HUB_PHONE_RESTORE !== "0";
 	const params = new URLSearchParams();
-	if (filename === PHONE_UI_FILENAME && !restoreEnabled) params.set("restore", "0");
 	const stamp = uiStamp(config, filename);
 	if (stamp) params.set("v", stamp);
 	const query = params.toString();
@@ -401,26 +403,31 @@ function phoneUiInstalled(config) {
 	if (!existsSync(index)) return false;
 	const html = readFileSync(index, "utf8");
 	return UI_FILENAMES.every(
-		(filename, position) => existsSync(assets[position]) && html.includes(filename),
+		(filename, position) =>
+			existsSync(assets[position]) && html.includes(filename),
 	);
 }
 
 function installPhoneUi(config) {
 	const { index, assets } = uiPaths(config.repo);
-	if (!existsSync(index)) return "UI layer: 未導入（webview がビルドされていません）";
+	if (!existsSync(index))
+		return "UI layer: 未導入（webview がビルドされていません）";
 	mkdirSync(dirname(assets[0]), { recursive: true });
 	for (const [position, filename] of UI_FILENAMES.entries()) {
 		const source = join(HERE, filename.replace("cline-lan-", ""));
-		if (!existsSync(source)) return `UI layer: 未導入（${filename.replace("cline-lan-", "")} が見つかりません）`;
+		if (!existsSync(source))
+			return `UI layer: 未導入（${filename.replace("cline-lan-", "")} が見つかりません）`;
 		copyFileSync(source, assets[position]);
 	}
 	const html = readFileSync(index, "utf8");
 	const missing = UI_FILENAMES.filter((filename) => !html.includes(filename));
 	if (missing.length) {
-		const tags = missing.map((filename) => uiTag(filename, config)).join("\n  ");
+		const tags = missing
+			.map((filename) => uiTag(filename, config))
+			.join("\n  ");
 		writeFileSync(index, html.replace("</body>", `  ${tags}\n</body>`));
 	}
-	return "UI layer: 導入済み（スマホ: Enter=改行 / 送信ボタン / session not found 自動復旧 ― 共通: 新規セッションボタン / 名前確定 / 削除確認）";
+	return "UI layer: 導入済み（新規セッションボタン / 名前確定 / 削除確認 / PC用送信ボタン）";
 }
 
 function uninstallPhoneUi(config) {
@@ -438,7 +445,14 @@ function uninstallPhoneUi(config) {
 		if (existsSync(asset)) rmSync(asset, { force: true });
 	}
 	// Older layout kept the phone file at the webview root.
-	const legacy = join(config.repo, "apps", "cline-hub", "dist", "webview", "cline-lan-phone-ui.js");
+	const legacy = join(
+		config.repo,
+		"apps",
+		"cline-hub",
+		"dist",
+		"webview",
+		"cline-lan-phone-ui.js",
+	);
 	if (existsSync(legacy)) rmSync(legacy, { force: true });
 	return "UI layer: 解除済み";
 }
@@ -603,7 +617,8 @@ function clineCheckoutState(config) {
 			["-C", config.repo, "status", "--porcelain", "--", "apps/cline-hub"],
 			{ windowsHide: true, encoding: "utf8" },
 		);
-		if (status.status !== 0) return "git 確認できず（チェックアウトではない？）";
+		if (status.status !== 0)
+			return "git 確認できず（チェックアウトではない？）";
 		const dirty = (status.stdout ?? "")
 			.split(/\r?\n/)
 			.map((line) => line.trim())
@@ -669,14 +684,11 @@ async function commandDoctor(config) {
 				? "OK"
 				: "要 bun run build:sdk",
 		],
-		[
-			"cline checkout",
-			clineCheckoutState(config),
-		],
+		["cline checkout", clineCheckoutState(config)],
 		[
 			"UI layer",
 			phoneUiInstalled(config)
-				? "導入済み（スマホ: Enter=改行 / 送信ボタン / session not found 自動復旧 ― 共通: 新規セッションボタン / 名前確定 / 削除確認 / 入力欄 Enter=改行 / 送信ボタン）"
+				? "導入済み（新規セッションボタン / 名前確定 / 削除確認 / PC用送信ボタン）"
 				: "未導入（start でビルド成果物に導入される）",
 		],
 		["session rename", sessionRenameState(config)],

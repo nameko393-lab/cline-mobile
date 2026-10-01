@@ -75,6 +75,13 @@ export type WebviewChatMessage = Omit<
 export type WebviewConfig = {
 	provider?: string;
 	model?: string;
+	/**
+	 * Launch folder for a new session. The server's resolveLaunchContext accepts
+	 * these as a session-context override, which is how a peer recovers a session
+	 * the hub no longer holds in memory (same folder, same provider/model).
+	 */
+	workspaceRoot?: string;
+	cwd?: string;
 	mode?: "act" | "plan";
 	systemPrompt?: string;
 	maxIterations?: number;

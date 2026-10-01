@@ -1,7 +1,12 @@
+import { toast } from "sonner";
 import type {
 	WebviewInboundMessage,
 	WebviewOutboundMessage,
 } from "../../webview-protocol";
+import {
+	createSessionRecovery,
+	type SessionRecovery,
+} from "./lib/session-recovery";
 
 type VsCodeApi = {
 	postMessage(message: WebviewInboundMessage): void;
@@ -17,8 +22,29 @@ declare global {
 
 let cachedApi: VsCodeApi | undefined;
 let browserSocket: WebSocket | undefined;
+let sessionRecovery: SessionRecovery | undefined;
 const pendingMessages: WebviewInboundMessage[] = [];
 const stateKey = "cline-hub-webview-state";
+
+/**
+ * Recovery for `session not found`, once per socket. It only moves protocol
+ * frames (restore the latest checkpoint, else create a session in the same
+ * folder) and posts through the socket directly, so it never re-enters
+ * postMessage.
+ */
+function ensureSessionRecovery(socket: WebSocket): SessionRecovery {
+	if (!sessionRecovery) {
+		sessionRecovery = createSessionRecovery(
+			(message) => {
+				if (socket.readyState === WebSocket.OPEN) {
+					socket.send(JSON.stringify(message));
+				}
+			},
+			{ onToast: (text) => toast(text) },
+		);
+	}
+	return sessionRecovery;
+}
 
 function dispatchHostMessage(message: WebviewOutboundMessage): void {
 	window.dispatchEvent(new MessageEvent("message", { data: message }));
@@ -58,6 +84,9 @@ function createBrowserSocket(): WebSocket {
 		try {
 			const message = JSON.parse(String(event.data)) as WebviewOutboundMessage;
 			dispatchHostMessage(message);
+			if (browserSocket) {
+				ensureSessionRecovery(browserSocket).handleIncoming(message);
+			}
 		} catch {
 			pendingMessages.splice(0);
 			dispatchHostMessage({
@@ -87,6 +116,7 @@ function createBrowserApi(): VsCodeApi {
 	return {
 		postMessage(message) {
 			const socket = createBrowserSocket();
+			ensureSessionRecovery(socket).handleOutgoing(message);
 			if (socket.readyState === WebSocket.OPEN) {
 				socket.send(JSON.stringify(message));
 				return;

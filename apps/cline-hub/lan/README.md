@@ -168,28 +168,33 @@ bun lan-hub.mjs logs [行数]
    （無いと `origin not allowed` になる）
 3. セッション一覧から選び、Composer でプロンプトを送る
 
-## 注入する UI 層（2 つ）
+## スマホ用の操作性は cline ソース側（注入ではない）
 
-`start` は以下の 2 スクリプトをダッシュボードの**ビルド成果物**
+Enter の扱い・送信ボタン・画面サイズはダッシュボード本体のソースに入っています。
+
+| 項目 | 挙動 | 実装 |
+|---|---|---|
+| Enter | 改行（送信はしない） | `src/webview/src/lib/composer-keyboard.ts` |
+| Shift+Enter | 従来どおり改行（ブラウザに委譲） | 同上 |
+| 日本語入力 | IME 変換確定の Enter をそのまま尊重 | 同上 |
+| 送信 | 本体の送信ボタン（タッチ画面では **停止** ラベルに変わる） | `src/webview/src/components/Composer.tsx` |
+| 画面 | 横スクロール禁止・セーフエリア余白・タップ目標 40px・入力 16px（iOS のフォーカス時ズーム防止） | `src/webview/src/index.css`（`@media (pointer: coarse)`）+ `index.html` の `viewport-fit=cover` |
+| 判定 | `matchMedia("(pointer: coarse)")` | `src/webview/src/lib/use-touch-layout.ts` |
+| `session not found` | hub に読み込み直して会話を継ぐ（下記） | `src/webview/src/lib/session-recovery.ts` |
+
+検証: `bun run -F @cline/cline-hub test`（`composer-keyboard.test.ts` と
+`session-recovery.test.ts` を含む vitest）
+
+## 注入する UI 層（1 つ）
+
+`start` は `dashboard-ui.js` をダッシュボードの**ビルド成果物**
 （`apps/cline-hub/dist/webview/assets/`、gitignore 対象）へコピーし、`index.html` に
-`<script>` を 2 行追加します。`stop` で解除（2 行とアセットを削除）。cline のソースに
+`<script>` を 1 行追加します。`stop` で解除（タグとアセットを削除）。cline のソースに
 は触れないので、cline は素のままです。
 
 | ファイル | 有効になる環境 |
 |---|---|
-| `phone-ui.js` | スマホ（幅 820px 以下 / タッチ画面）だけ。PC ブラウザでは cline 標準のまま |
-| `dashboard-ui.js` | PC / スマホ共通（スマホで `phone-ui.js` が入力欄を処理済みの場合は phone 層に譲る） |
-
-### スマホ用の操作性（`phone-ui.js`）
-
-| 項目 | 挙動 |
-|---|---|
-| Enter | 改行（送信はしない） |
-| Shift+Enter | 従来どおり改行 |
-| 日本語入力 | IME 変換確定の Enter をそのまま尊重 |
-| 送信 | 画面右下の**送信**ボタン（送信中は**停止**に変わる） |
-| 位置 | キーボードの高さを追従（`visualViewport.height`）、iOS セーフエリア内に表示。行が横に溢れてレイアウト viewport が画面より広くなったときは、`visualViewport.width` の差分だけ左に寄せる（`overflow-x: hidden` と composer 行の `flex-wrap` で横スクロール自体を出さない） |
-| 入力 | 16px（iOS のフォーカス時ズーム防止）、タップ目標 40px 以上 |
+| `dashboard-ui.js` | PC / スマホ共通（`pointer: coarse` / 820px 以下では入力欄と送信ボタンをソース側に譲る） |
 
 ### ダッシュボード用の追加（`dashboard-ui.js`）
 
@@ -210,11 +215,9 @@ bun lan-hub.mjs logs [行数]
   リセットするため、focus すると入力中の内容が消えて確定が空振りになる。Enter
   キーダウンだけをリプレイし、入力欄がフォーカス中のときだけ blur する
 - Sessions タブの行末メニューの Delete はダッシュボード本体の確認ダイアログが既にあり、そのままです
-- **Enter の処理は 1 層だけ**：`phone-ui.js` が処理した入力欄（`dataset.clineLanPhoneUi`）と画面右下の送信ボタンを検知したら `dashboard-ui.js` は入力欄に触れない（Enter 1 回で改行が 2 個入るのを防ぐ）
-- **スマホ相当の画面幅（`pointer: coarse` / 820px 以下）では入力欄を phone 層に譲る**：インラインの送信ボタンは狭い composer 行に収まらず右端の外へ出て押せなくなるため、浮いた送信ボタンを持つ phone 層に任せる。PC 側も composer 行に `flex-wrap: wrap` を入れて、狭い窓では行が折り返される
-- 検証: `bun dashboard-ui.test.mjs`（ヘッドレス DOM で新規セッション遷移 / 確定ボタン / 削除確認 / キャンセル / Enter=改行 / 送信ボタン / phone 層との排他を再現）
-
-- 検証: `bun run test`（ヘッドレス DOM で Enter=改行 / 送信ボタン / IME / `session not found` の会話継続リストアを検証）
+- **Enter の処理は 1 層だけ**：入力欄の Enter はソース側（`composer-keyboard.ts`）が処理する。`dashboard-ui.js` は `pointer: coarse` / 820px 以下の画面では入力欄にも送信ボタンにも触れない（Enter 1 回で改行が 2 個入るのを防ぐ）
+- PC 側も composer 行に `flex-wrap: wrap` を入れて、狭い窓では行が折り返される
+- 検証: `bun run -F @cline/cline-hub test:lan`（ヘッドレス DOM で新規セッション遷移 / 確定ボタン / 削除確認 / キャンセル / Enter=改行 / 送信ボタン / ソース側との排他を再現）
 - `bun run build:webview` を実行すると注入は消えるので、次回 `start` で再導入されます
 - 注入した JS はブラウザがキャッシュします。`start` ごとにタグの `?v=`（注入ファイルの
   更新時刻＋サイズ）が変わるので、**通常のリロードだけで新しい版が読めます**
@@ -270,18 +273,16 @@ await ctx.cline.update(frame.sessionId, {
 受け付けるのは hub がメモリに持つセッションだけです。ダッシュボードはセッションを選ぶと履歴を
 表示するだけで hub に読み込ませないため、デスクトップで作ったセッションなどに送ると `session not found:<id>` になります。
 
-対処（スマホ UI 層の WS 仲介。cline 本体は無変更）:
+対処（ダッシュボード本体の WS 仲介。`src/webview/src/lib/session-recovery.ts`）:
 1. そのエラーを受け取ると、ダッシュボード本来の `restore` を発火して**そのセッションを hub に読み込み直し、会話を継いだまま入力したプロンプトを送り直します**（履歴とチェックポイントが復元され、プロバイダ／モデル／モードも引き継がれます）
 2. チェックポイントが無い／リストアが応答しないセッションは、**同じフォルダの新セッション**に送り直します（hub がフォルダを知らないセッションは作り直さない。その場合は新規セッションとして送ってください）
 
-この仲介はブラウザ側の WebSocket を眺めるだけで、cline 本体は変更していません。PC ブラウザ
-からも同じように効きます。
+ブラウザ側の WebSocket を眺める仲介は不要になり、復旧はダッシュボード本体のコードで動きます。
+PC ブラウザからも同じように効きます。
 
 - **注意**: リストアはチェックポイントの時点まで**作業フォルダのファイルも巻き戻します**
   （ダッシュボード本来の restore と同じ挙動）。チェックポイント以降に PC 側で手編集した
   ファイルがある場合は、スマホから送る前に PC 側でコミットしておいてください
-- リストアを止めたいときは `config.json` の `phoneRestore: false`（または
-  `CLINE_HUB_PHONE_RESTORE=0`）。その場合は同じフォルダの新セッションへの送り直しだけになります
 
 ## トラブルシューティング
 
@@ -296,11 +297,10 @@ await ctx.cline.update(frame.sessionId, {
 | スマホが到達できない | `firewall --apply`、AP のクライアント分離、PC の IP 変化 |
 | `origin not allowed` | 招待 URL（`?roomSecret=`）で開く |
 | `session not found` | 自動でそのセッションを hub に読み込み直して送り直す（上のセクション）。トーストが出ないまま失敗するだけなら、セッション一覧が届くのを待って再送 |
-| 送信ボタンが出ない | 注入が解けている。`doctor` で `UI layer` を確認し `start` し直す（スマホは画面右下の浮いたボタン、PC は本体の送信ボタンの右） |
-| 送信ボタンが右にはみ出して押せない | 注入が古い版（横溢屏の補正と `flex-wrap` がない）。`start` し直して `?v=` を更新し、リロードする |
+| 送信ボタンが無い / Enter で送信される | ソース版がビルドされていない。`cd apps\cline-hub && bun run build:webview` してリロード（`doctor` の `webview dist` を確認） |
+| 送信ボタンが右にはみ出して押せない | ビルドが古い（`flex-wrap` / セーフエリアの規則がない）。`bun run build:webview` し直してリロードする |
 | 新規セッションボタン / 削除確認が出ない | `dashboard-ui.js` 未導入。`doctor` で `UI layer` を確認し `start` し直す |
 | 確認ダイアログが半透明・読みにくい | 注入が古い版。`start` し直して `assets/cline-lan-dashboard-ui.js` を更新（`oklch()` の変数を `hsl()` で包むと透明になる） |
-| Enter で送信される | 注入が解けた状態。`start` し直す（`build:webview` 後に未導入になる） |
 
 ログ: `logs/dashboard.log`（LAN）、`logs/dashboard-local.log`（PC 用）
 状態: `bun lan-hub.mjs status` / `doctor`

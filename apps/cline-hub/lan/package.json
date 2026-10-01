@@ -14,7 +14,7 @@
 		"stop": "bun lan-hub.mjs stop",
 		"status": "bun lan-hub.mjs status",
 		"doctor": "bun lan-hub.mjs doctor",
-		"test": "node phone-ui.test.mjs && node dashboard-ui.test.mjs",
+		"test": "node dashboard-ui.test.mjs",
 		"url": "bun lan-hub.mjs url",
 		"firewall": "bun lan-hub.mjs firewall --apply"
 	},
