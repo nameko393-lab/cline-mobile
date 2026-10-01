@@ -127,14 +127,21 @@ echo.
 
 rem ------------------------------------------------------------- 6 desktop
 echo  [6/7] Cline desktop  -  the hub daemon that runs the agent loop
-if "%HUB%"=="1" (
-  echo    hub record found: %HUBLOCK%
+pushd "%LAN%"
+call "!BUN!" lan-hub.mjs hub
+set "HUBRC=!ERRORLEVEL!"
+popd
+if "!HUBRC!"=="0" (
+  echo    hub is answering
 ) else (
-  echo    No hub record. The dashboard only mediates: session.create and
-  echo    run.start go to the hub daemon that the Cline desktop app starts.
-  echo    Start Cline desktop and sign in.
-  call :ask "Cline desktop is not running. Continue anyway?  y/N"
+  echo    The hub is not answering. The Cline desktop app is what starts it.
+  call :ask "Start the Cline desktop app now to bring the hub up?  y/N"
   if /i not "!ANSWER!"=="y" call :die "start Cline desktop, sign in, then run install.cmd again."
+  pushd "%LAN%"
+  call "!BUN!" lan-hub.mjs hub --launch
+  set "HUBRC=!ERRORLEVEL!"
+  popd
+  if not "!HUBRC!"=="0" call :die "the hub did not come up. Open Cline desktop, sign in, then run install.cmd again."
 )
 echo.
 
@@ -151,7 +158,7 @@ if /i "!ANSWER!"=="y" powershell -NoProfile -ExecutionPolicy Bypass -File "%LAN%
 call :ask "Start the dashboard now  -  phone 8787 and PC 8788?  y/N"
 if /i "!ANSWER!"=="y" (
   set "CLINE_HUB_NO_PAUSE=1"
-  call "%LAN%\start.cmd" nobrowser
+  call "%REPO%\start.cmd" nobrowser
   set "CLINE_HUB_NO_PAUSE="
 )
 echo.
@@ -171,7 +178,7 @@ echo.
 echo  PHONE : open the invite URL above on a phone on the same Wi-Fi
 echo          keep the roomSecret part of the URL
 echo  PC    : http://localhost:8788/
-echo  STOP  : apps\cline-hub\lan\stop.cmd  -  dashboard only, desktop untouched
+echo  STOP  : stop.cmd in this folder  -  dashboard only, desktop untouched
 goto :end
 
 rem ---------------------------------------------------------------- report

@@ -1,8 +1,10 @@
 @echo off
 rem ==========================================================================
-rem  Cline Hub dashboard stopper  (LAN 8787 + PC 8788)
+rem  Cline Hub dashboard stopper  (phone 8787 + PC 8788)
 rem  Stops ONLY the hub dashboards, never the Cline desktop / PC hub.
 rem  Usage: double-click
+rem
+rem  Lives at the repo root; the launcher it drives is apps\cline-hub\lan.
 rem
 rem  Batch files in this repo are CRLF (see the root .gitattributes) and keep
 rem  to ASCII: cmd.exe parses this file in the console codepage, before the
@@ -11,6 +13,8 @@ rem ==========================================================================
 setlocal EnableExtensions EnableDelayedExpansion
 chcp 65001 >nul
 cd /d "%~dp0"
+
+set "LAN=%~dp0apps\cline-hub\lan"
 
 rem Resolve bun: PATH first, then the usual per-user install locations.
 set "BUN="
@@ -24,13 +28,13 @@ if not defined BUN goto :nobun
 echo ============ Cline Hub stop ============
 echo.
 echo [1/2] LAN dashboard  (8787)
-call "!BUN!" lan-hub.mjs stop
+call "!BUN!" "!LAN!\lan-hub.mjs" stop
 echo.
 echo [2/2] Local dashboard  (8788)
-call "!BUN!" lan-hub.mjs stop --local
+call "!BUN!" "!LAN!\lan-hub.mjs" stop --local
 echo.
 echo status:
-call "!BUN!" lan-hub.mjs status
+call "!BUN!" "!LAN!\lan-hub.mjs" status
 echo.
 echo Stopped. The Cline desktop app and the PC hub were NOT touched.
 call :maybe_pause

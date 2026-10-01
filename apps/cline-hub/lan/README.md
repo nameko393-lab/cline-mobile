@@ -25,8 +25,8 @@ PC 側の Cline（desktop / Cline Hub）が登録しているセッションを�
 ```powershell
 cd <repo>\apps\cline-hub\lan
 bun install              # ルートで bun install を実行済みなら qrcode も入ります
-.\start.cmd              # ダブルクリックでも可（LAN 8787 + PC 8788）
-.\stop.cmd
+..\..\..\start.cmd       # 起動スクリプトはリポジトリ直下（LAN 8787 + PC 8788）
+..\..\..\stop.cmd        # 停止スクリプトもリポジトリ直下
 bun lan-hub.mjs doctor
 bun lan-hub.mjs ui       # build:webview 後に注入 UI 層を再適用（index.html を作り直すため）
 bun run -F @cline/cline-hub test:lan   # ランチャー単体のテスト
@@ -119,15 +119,17 @@ cline-hub status  /  url  /  doctor  /  logs 60  /  firewall --apply
 
 | 実行方法 | 記述 |
 |---|---|
-| エクスプローラーで二重クリック | `start.cmd` / `stop.cmd` |
-| cmd.exe | `cd /d <このフォルダ>` → `.\start.cmd` |
-| PowerShell | `cd <このフォルダ>` → `.\start.cmd` |
+| エクスプローラーで二重クリック | リポジトリ直下の `start.cmd` / `stop.cmd` |
+| cmd.exe | `cd /d <リポジトリ直下>` → `.\start.cmd` |
+| PowerShell | `cd <リポジトリ直下>` → `.\start.cmd` |
 
 `.\` が必要な理由: PowerShell はカレントディレクトリを探索しません。さらに
 `NoDefaultCurrentDirectoryInExePath=1` が設定されている環境（Windows Terminal、VS Code、
 自動化作業のシェル）では cmd.exe もカレントを探索しないため、`start.cmd` という素の名前は
 `not recognized` になります（`.\start.cmd` かフルパスなら動きます）。両スクリプトは先頭で
-`cd /d "%~dp0"` して自分のフォルダに移動するので、フルパス呼び出しはどの場所からでも安全です。
+自分の場所を割り出すので、フルパス呼び出しはどの場所からでも安全です。
+`start.cmd` / `stop.cmd` はリポジトリ直下にあり、このフォルダの `lan-hub.mjs` を呼みます
+（`start.cmd` は最初に hub の応答を確認し、応答がなければ Cline desktop を起動して待ちます）。
 
 `bun` は PATH → `%USERPROFILE%\AppData\Roaming\npm\...` → `%USERPROFILE%\.bun\bin` の順に探します。
 
@@ -139,6 +141,7 @@ bun lan-hub.mjs local              :: PC ブラウザ用（127.0.0.1:8788、room
 bun lan-hub.mjs stop [--local]
 bun lan-hub.mjs restart [--local]
 bun lan-hub.mjs status
+bun lan-hub.mjs hub [--launch]       :: Cline desktop の hub 稼働確認（--launch で desktop を起動して待機）
 bun lan-hub.mjs url                :: 招待 URL（1 行目）+ QR
 bun lan-hub.mjs doctor
 bun lan-hub.mjs ui [--remove]      :: 注入 UI 層の再導入 / 解除（build:webview で index.html が作り直されるため再導入が必要）
@@ -166,7 +169,8 @@ bun lan-hub.mjs logs [行数]
 
 ## スマホでの接続
 
-1. PC で `start.cmd` を実行し、表示される招待 URL をコピー
+1. PC でリポジトリ直下の `start.cmd` を実行し、表示される招待 URL をコピー
+   （hub の応答を確認し、応答がなければ Cline desktop を起動して立ち上がりを待ってから起動します）
    （`http://<PC の LAN IP>:8787/?roomSecret=...`）
 2. 同一 Wi-Fi のスマホで開く。**`?roomSecret=...` が必須**
    （無いと `origin not allowed` になる）

@@ -27,7 +27,7 @@ import {
  *    so PUBLIC_URL must be exactly the LAN URL the phone opens.
  *  - ROOM_SECRET is mandatory for a non-local bind.
  *
- * Commands: start | stop | restart | status | url | doctor | firewall | logs
+ * Commands: start | stop | restart | status | hub [--launch] | url | doctor | firewall | logs
  */
 import { homedir, networkInterfaces } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -194,6 +194,86 @@ function readHubRecord() {
 	} catch (error) {
 		return { path, error: error.message };
 	}
+}
+
+/**
+ * The hub daemon belongs to the Cline desktop app (its sidecar writes the
+ * record when it boots). Health is the only trustworthy probe: a stale record
+ * with a dead pid fails here.
+ */
+async function hubHealthy(url) {
+	if (!url) return false;
+	try {
+		const u = new URL(url);
+		const res = await fetch(`http://${u.hostname}:${u.port}/health`);
+		return res.ok;
+	} catch {
+		return false;
+	}
+}
+
+/** Where the installed Cline desktop app lives (Windows install locations). */
+function findDesktopApp() {
+	const localAppData = process.env.LOCALAPPDATA ?? "";
+	const programFiles =
+		process.env.ProgramFiles ?? process.env["ProgramFiles(x86)"] ?? "";
+	const candidates = [
+		// A non-standard install (or a test) can point at the app explicitly.
+		process.env.CLINE_DESKTOP_EXE,
+		join(localAppData, "Cline", "cline-app.exe"),
+		join(localAppData, "Programs", "Cline", "cline-app.exe"),
+		join(programFiles, "Cline", "cline-app.exe"),
+	].filter(Boolean);
+	return candidates.find((candidate) => existsSync(candidate)) ?? "";
+}
+
+/**
+ * hub [--launch]: is the desktop hub answering? With --launch, a hub that is
+ * not answering is started by launching the Cline desktop app and waiting for
+ * its daemon to register. The desktop app is only ever started here - never
+ * stopped, restarted, updated or reconfigured.
+ */
+async function commandHub(launch) {
+	let record = readHubRecord();
+	if (record.url && (await hubHealthy(record.url))) {
+		info(`hub 稼働中: ${record.url} pid=${record.pid ?? "?"}`);
+		return 0;
+	}
+	info(
+		record.missing
+			? "hub record なし（desktop 起動時に作られる）"
+			: `hub record 応答なし: ${record.url} pid=${record.pid ?? "?"}`,
+	);
+	if (!launch) {
+		info(
+			"hub が起動していません。Cline desktop を起動するか、hub --launch を使ってください。",
+		);
+		return 1;
+	}
+	const app = findDesktopApp();
+	if (!app) {
+		info(
+			"Cline desktop が見つかりません: https://cline.bot/desktop からインストールしてください。",
+		);
+		info(
+			"既定以外の場所のインストールは CLINE_DESKTOP_EXE に実行ファイルのパスを指定できます。",
+		);
+		return 1;
+	}
+	info(`hub が応答しないため Cline desktop を起動します: ${app}`);
+	spawn(app, [], { detached: true, stdio: "ignore" }).unref();
+	for (let attempt = 0; attempt < 90; attempt++) {
+		await new Promise((resolve) => setTimeout(resolve, 1000));
+		record = readHubRecord();
+		if (record.url && (await hubHealthy(record.url))) {
+			info(`hub 稼働中: ${record.url} pid=${record.pid ?? "?"}`);
+			return 0;
+		}
+	}
+	info(
+		"hub が起動しません。Cline desktop を開いてサインインしているか確認してください。",
+	);
+	return 1;
 }
 
 function findBun() {
@@ -788,6 +868,9 @@ async function main() {
 		case "status":
 			process.exitCode = await commandStatus(config);
 			break;
+		case "hub":
+			process.exitCode = await commandHub(rest.includes("--launch"));
+			break;
 		case "url":
 			process.exitCode = await commandUrl(config);
 			break;
@@ -815,10 +898,13 @@ async function main() {
 		}
 		default:
 			info(
-				"使い方: bun lan-hub.mjs <start|local|stop [--local]|restart [--local]|status|url|doctor|firewall [--apply]|ui [--remove]|logs [行数]>",
+				"使い方: bun lan-hub.mjs <start|local|stop [--local]|restart [--local]|status|hub [--launch]|url|doctor|firewall [--apply]|ui [--remove]|logs [行数]>",
 			);
 			info("  start  … スマホ用（0.0.0.0、roomSecret 必須）");
 			info("  local  … PC ブラウザ用（127.0.0.1、roomSecret 不要）");
+			info(
+				"  hub    … Cline desktop の hub 稼働確認（--launch で desktop を起動して待機）",
+			);
 			info("  ui     … 注入 UI 層を再導入（build:webview 後はこれが必要）");
 			process.exitCode = 2;
 	}

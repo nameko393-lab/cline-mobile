@@ -44,17 +44,32 @@ if (-not (Test-Path -LiteralPath $Server)) {
 	exit 1
 }
 
+# start.cmd / stop.cmd live at the repo root. Find it through the dashboard
+# marker so a relocated launcher keeps working.
+$RepoRoot = $LauncherDir
+while ($RepoRoot) {
+	if (Test-Path -LiteralPath (Join-Path $RepoRoot 'apps\cline-hub\src\server.ts')) { break }
+	$parent = Split-Path -Parent $RepoRoot
+	if (-not $parent -or $parent -eq $RepoRoot) { $RepoRoot = '' ; break }
+	$RepoRoot = $parent
+}
+if (-not $RepoRoot) {
+	Write-Host 'repo root not found (no apps\cline-hub\src\server.ts above the launcher)'
+	exit 1
+}
+
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
-# start/stop go through the .cmd scripts (QR + status output); every other
-# subcommand is passed straight to lan-hub.mjs.
+# start/stop go through the .cmd scripts at the repo root (QR + status
+# output); every other subcommand is passed straight to lan-hub.mjs.
 $lines = New-Object System.Collections.Generic.List[string]
 $lines.Add('@echo off')
 $lines.Add('setlocal enabledelayedexpansion')
 $lines.Add('set "CLINE_HUB_NO_PAUSE=1"')
 $lines.Add('set "HERE=' + $LauncherDir + '"')
-$lines.Add('if /i "%~1"=="start" ( call "!HERE!\start.cmd" %2 %3 & exit /b !ERRORLEVEL! )')
-$lines.Add('if /i "%~1"=="stop" ( call "!HERE!\stop.cmd" %2 %3 & exit /b !ERRORLEVEL! )')
+$lines.Add('set "ROOT=' + $RepoRoot + '"')
+$lines.Add('if /i "%~1"=="start" ( call "!ROOT!\start.cmd" %2 %3 & exit /b !ERRORLEVEL! )')
+$lines.Add('if /i "%~1"=="stop" ( call "!ROOT!\stop.cmd" %2 %3 & exit /b !ERRORLEVEL! )')
 $lines.Add('set "BUN=bun"')
 $lines.Add('where bun >nul 2>nul')
 $lines.Add('if errorlevel 1 (')
@@ -79,7 +94,7 @@ Write-Host ''
 Write-Host 'Restart your terminal, then from any folder:'
 Write-Host '  cline-hub start'
 Write-Host '  cline-hub stop'
-Write-Host '  cline-hub status | url | doctor | logs 60 | firewall --apply'
+Write-Host '  cline-hub status | url | doctor | hub | logs 60 | firewall --apply'
 Write-Host ''
 Write-Host 'Undo: powershell -ExecutionPolicy Bypass -File install-cli.ps1 -Remove'
 exit 0

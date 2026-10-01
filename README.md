@@ -28,7 +28,7 @@ install.cmd
 | 3 | bun 1.4.2 検出 | 無いとき y/N（`npm install -g bun@1.4.2`） |
 | 4 | ビルド（`bun install` → `build:sdk` → `build:webview`）+ 注入 UI 層の再適用 | 自動 |
 | 5 | `apps\cline-hub\lan\config.json` 作成（既存は保持） | 自動 |
-| 6 | Cline desktop の hub record 確認 | 無いとき y/N |
+| 6 | Cline hub の応答確認（応答なしなら y/N で Cline desktop を起動して待機） | 自動 + y/N |
 | 7 | ファイアウォール開放 / PATH 登録 / 起動 | すべて y/N |
 
 - **インストールは必ず y/N 確認の後**に実行します（winget・npm・ファイアウォール・PATH）
@@ -39,12 +39,14 @@ install.cmd
 導入後、コンソールに出る招待 URL をスマホで開くと操作できます（PC 自身は `http://localhost:8788/`）。
 
 ```cmd
-apps\cline-hub\lan\start.cmd      :: 起動（スマホ 8787 + PC 8788、QR と招待 URL）
-apps\cline-hub\lan\stop.cmd       :: 停止（ダッシュボードのみ、desktop は無傷）
-apps\cline-hub\lan\start.cmd nobrowser
+start.cmd                       :: 起動（リポジトリ直下。ハブ確認 → スマホ 8787 + PC 8788、QR と招待 URL）
+stop.cmd                        :: 停止（リポジトリ直下。ダッシュボードのみ、desktop は無傷）
+start.cmd nobrowser             :: PC ブラウザを開けずに起動
 powershell -ExecutionPolicy Bypass -File apps\cline-hub\lan\install-cli.ps1
-                                  :: 任意: cline-hub start / stop / status / doctor
+                                :: 任意: cline-hub start / stop / status / doctor
 ```
+
+`start.cmd` は起動前に **Cline hub が応答しているかを確認**します（`bun lan-hub.mjs hub`）。応答しない場合は **Cline desktop を自動で起動**し、hub が立ち上がるまで最大 90 秒待ってから続行します。立ち上がらない場合だけエラー終了し、インストール先（https://cline.bot/desktop）と確認コマンドを表示します。desktop を停止・再起動・設定変更することは一切ありません。
 
 ---
 
@@ -89,7 +91,8 @@ cd apps\cline-hub\lan
 copy config.example.json config.json
 bun lan-hub.mjs doctor              :: 全行 OK と hub record が出ることを確認
 bun lan-hub.mjs firewall --apply    :: UAC 昇格・TCP/8787 を LAN サブネット限定で許可
-start.cmd
+cd ..\..\..
+start.cmd                           :: リポジトリ直下（hub 確認 → 自動起動 → ダッシュボード起動）
 ```
 
 
@@ -136,6 +139,7 @@ start.cmd
 install.cmd check                      :: リポジトリ直下。環境レポート（何も変更しない）
 cd apps\cline-hub\lan
 bun lan-hub.mjs doctor                 :: 全行 OK（webview dist / sdk dist / hub record / firewall）
+bun lan-hub.mjs hub                    :: hub 稼働確認（--launch で desktop を起動して待機）
 bun lan-hub.mjs status
 bun run -F @cline/cline-hub test:lan
 bun run -F @cline/cline-hub test
@@ -148,10 +152,11 @@ start /a http://localhost:8788/health
 
 | 目的 | コマンド |
 |---|---|
-| 起動 / 停止 | `start.cmd` / `stop.cmd`（`cline-hub start` / `stop`） |
+| 起動 / 停止 | `start.cmd` / `stop.cmd`（**リポジトリ直下**、`cline-hub start` / `stop`） |
+| hub だけ確認 / 起動 | `bun lan-hub.mjs hub` / `bun lan-hub.mjs hub --launch`（`start.cmd` が毎回実行） |
 | 反映（ダッシュボードはソース起動） | `bun lan-hub.mjs restart`（PC 用は `restart --local`） |
 | 状態 / 招待 URL / 診断 / ログ | `status` / `url`（`--qr`）/ `doctor` / `logs 60` |
-| ログファイル | `logs\dashboard.log`（スマホ用）・`logs\dashboard-local.log`（PC 用） |
+| ログファイル | `apps\cline-hub\lan\logs\dashboard.log`（スマホ用）・`dashboard-local.log`（PC 用） |
 
 ## 更新
 
@@ -174,7 +179,7 @@ cline-hub restart
 | `bun が見つかりません` | `npm install -g bun@1.4.2` |
 | `Cline が見つかりません` | `config.json` の `repo` または `CLINE_REPO` |
 | `webview が未ビルド` / `sdk dist` 警告 | `bun run -F @cline/cline-hub build:webview` / `bun run build:sdk` |
-| `hub record` なし / `hub health` 失敗 | Cline desktop を起動してサインイン → 再 `doctor` |
+| `hub record` なし / `hub health` 失敗 | `start.cmd` が Cline desktop を自動起動して最大 90 秒待機。出ない場合は desktop を手動起動してサインイン → `bun lan-hub.mjs hub` |
 | セッション一覧が空 | dev hub に接続していないか確認（`CLINE_BUILD_ENV` を設定しない） |
 | `origin not allowed` | 招待 URL（`?roomSecret=`）で開く |
 | スマホが到達できない | `bun lan-hub.mjs firewall --apply` / AP のクライアント分離 / `publicHost` |
