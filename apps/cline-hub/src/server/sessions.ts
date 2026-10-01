@@ -91,6 +91,12 @@ function buildSessionStartInput(
 		source?: SessionSource;
 		sessionMetadata?: Record<string, unknown>;
 		initialMessages?: MessageWithMetadata[];
+		/**
+		 * Start under an existing id. The runtime hosts honour a requested
+		 * `config.sessionId`, so loading a stored session back in keeps the id
+		 * the user picked instead of minting a new history entry.
+		 */
+		sessionId?: string;
 	},
 ): ClineCoreStartInput {
 	const mode = options?.mode === "plan" ? "plan" : "act";
@@ -103,6 +109,7 @@ function buildSessionStartInput(
 			cwd: context.cwd,
 			providerId: context.providerId,
 			modelId: context.modelId,
+			...(options?.sessionId ? { sessionId: options.sessionId } : {}),
 			systemPrompt: options?.systemPrompt ?? "",
 			mode,
 			...reasoningOptions,
@@ -193,10 +200,12 @@ async function loadHistoryFor(
  * created by Cline Desktop (or one from before the hub started) is listed and
  * hydratable from disk, while sending to it answers `session not found: <id>`.
  * There is no "attach an existing session" hub command, so the load is done the
- * same way the CLI's ACP resume does it: start a session seeded with the stored
- * conversation (`initialMessages`), in the same folder, with the same provider
- * and model. The conversation continues in that session and the peer is moved
- * onto it, so the follow-up prompt can be sent for real.
+ * way the CLI's ACP resume and the desktop sidecar do it: start the session
+ * under its stored id (`config.sessionId`) seeded with the stored conversation
+ * (`initialMessages`), in the same folder, with the same provider and model. The
+ * runtime hosts keep that id and reuse the stored manifest, so the conversation
+ * continues in the session the user picked and the follow-up prompt can be sent
+ * for real.
  */
 export async function loadSessionIntoMemory(
 	ctx: HubContext,
@@ -228,11 +237,9 @@ export async function loadSessionIntoMemory(
 	});
 	const result = await ctx.cline.start(
 		buildSessionStartInput(context, {
+			sessionId,
 			mode: overrides?.mode ?? (metadata.mode === "plan" ? "plan" : "act"),
-			sessionMetadata: {
-				...metadata,
-				loadedFromSessionId: sessionId,
-			},
+			sessionMetadata: metadata,
 			initialMessages: history,
 		}),
 	);

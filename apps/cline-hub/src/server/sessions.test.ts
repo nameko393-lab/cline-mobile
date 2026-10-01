@@ -60,8 +60,12 @@ function makeCline(options: { liveSessionIds?: string[] } = {}): FakeCline {
 			sessionId === SOURCE_SESSION_ID ? storedMessages : [],
 		start: async (input: Record<string, unknown>) => {
 			cline.startInputs.push(input);
-			live.add(LOADED_SESSION_ID);
-			return { sessionId: LOADED_SESSION_ID };
+			// The runtime hosts reuse a requested session id, so loading a
+			// stored session back in keeps the session the user picked.
+			const config = input.config as { sessionId?: string } | undefined;
+			const sessionId = config?.sessionId?.trim() || LOADED_SESSION_ID;
+			live.add(sessionId);
+			return { sessionId };
 		},
 		send: async ({ sessionId, prompt }) => {
 			if (!live.has(sessionId)) throw sessionNotFoundError(sessionId);
@@ -97,9 +101,10 @@ describe("loading a disk-only session into the hub", () => {
 
 		const loaded = await loadSessionIntoMemory(ctx, peer, SOURCE_SESSION_ID);
 
-		expect(loaded).toBe(LOADED_SESSION_ID);
+		expect(loaded).toBe(SOURCE_SESSION_ID);
 		const startInput = cline.startInputs[0];
 		const config = startInput?.config as Record<string, unknown>;
+		expect(config.sessionId).toBe(SOURCE_SESSION_ID);
 		expect(config.workspaceRoot).toBe("C:/work/thesis");
 		expect(config.cwd).toBe("C:/work/thesis");
 		expect(config.providerId).toBe("openai-compatible");
@@ -107,9 +112,8 @@ describe("loading a disk-only session into the hub", () => {
 		expect(config.mode).toBe("plan");
 		expect(startInput?.initialMessages).toEqual(storedMessages);
 		expect(
-			(startInput?.sessionMetadata as Record<string, unknown>)
-				?.loadedFromSessionId,
-		).toBe(SOURCE_SESSION_ID);
+			(startInput?.sessionMetadata as Record<string, unknown>)?.title,
+		).toBe(sourceRecord.metadata.title);
 	});
 
 	it("moves the peer onto the loaded session and rehydrates it", async () => {
@@ -119,15 +123,15 @@ describe("loading a disk-only session into the hub", () => {
 
 		await loadSessionIntoMemory(ctx, peer, SOURCE_SESSION_ID);
 
-		expect((peer as BrowserPeer).selectedSessionId).toBe(LOADED_SESSION_ID);
-		expect(ctx.sessions.has(LOADED_SESSION_ID)).toBe(true);
+		expect((peer as BrowserPeer).selectedSessionId).toBe(SOURCE_SESSION_ID);
+		expect(ctx.sessions.has(SOURCE_SESSION_ID)).toBe(true);
 		expect(sent.map((frame) => frame.type).slice(0, 2)).toEqual([
 			"session_started",
 			"session_hydrated",
 		]);
 		expect(sent.map((frame) => frame.type)).toContain("hub_state");
 		const hydrated = sent[1];
-		expect(hydrated?.sessionId).toBe(LOADED_SESSION_ID);
+		expect(hydrated?.sessionId).toBe(SOURCE_SESSION_ID);
 		expect((hydrated?.messages as unknown[])?.length).toBe(storedMessages.length);
 	});
 
@@ -155,8 +159,9 @@ describe("loading a disk-only session into the hub", () => {
 
 		const loaded = await loadSessionIntoMemory(ctx, peer, SOURCE_SESSION_ID);
 
-		expect(loaded).toBe(LOADED_SESSION_ID);
+		expect(loaded).toBe(SOURCE_SESSION_ID);
 		const config = cline.startInputs[0]?.config as Record<string, unknown>;
+		expect(config.sessionId).toBe(SOURCE_SESSION_ID);
 		expect(config.workspaceRoot).toBe("C:/work/thesis");
 		expect(config.providerId).toBe("openai-compatible");
 		expect(config.modelId).toBe("swift-1.5-iq3_xxs");
@@ -185,7 +190,7 @@ describe("sending to a disk-only session", () => {
 
 		expect(cline.startInputs.length).toBe(1);
 		expect(cline.sentPrompts).toEqual([
-			{ sessionId: LOADED_SESSION_ID, prompt: "続きをやって" },
+			{ sessionId: SOURCE_SESSION_ID, prompt: "続きをやって" },
 		]);
 	});
 
