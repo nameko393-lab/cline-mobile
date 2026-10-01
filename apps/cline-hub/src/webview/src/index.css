@@ -268,5 +268,29 @@
 		min-width: 2.75rem;
 		white-space: nowrap;
 	}
+
+	/* The provider:model chip is the widest item in the footer row and the tools
+	   group carries shrink-0, so on a phone the row cannot shrink: the send
+	   button lands past the right edge, where it cannot be pressed (the page
+	   itself is overflow-x: hidden, so there is no way to scroll to it).
+	   Let the tools group shrink and truncate the chip instead. */
+	[data-composer-footer] > div,
+	[data-composer-footer] .shrink-0,
+	[data-composer-footer] .shrink-0 > button {
+		min-width: 0;
+		flex-shrink: 1;
+	}
+
+	[data-composer-footer] .shrink-0 > button > span {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* The send/stop group must never be the thing that shrinks. */
+	[data-composer-footer] > div > div:last-child {
+		flex-shrink: 0;
+	}
 }
 
