@@ -285,8 +285,9 @@ const window = {
 		dispatched.push(event.type)
 		return true
 	},
-	// Desktop: neither touch nor narrow, so the dashboard layer owns the composer.
-	matchMedia: () => ({ matches: false }),
+	// Phone-shaped viewport (touch): the rename confirm button belongs there.
+	// The composer is left to the dashboard source in every viewport.
+	matchMedia: (query) => ({ matches: query.includes("pointer: coarse") }),
 }
 
 const source = readFileSync(join(HERE, "dashboard-ui.js"), "utf8")
@@ -538,6 +539,45 @@ runLayer(narrow.doc, phoneWindow)
 
 check("narrow viewport gets no inline send button", walkFind(narrow.doc, "cline-lan-dashboard-ui-send") === null)
 check("narrow viewport leaves Enter to the phone layer", (narrow.textarea._listeners.keydown ?? []).length === 0)
+
+/* ------------------- viewport split for the rename button ------------------- */
+
+/** A chat header holding the session title input, for viewport scenarios. */
+function makeRenameDoc() {
+	const doc = new FakeNode("#document")
+	doc.readyState = "complete"
+	doc.createElement = (tag) => new FakeNode(tag)
+	doc.head = doc.appendChild(new FakeNode("head"))
+	doc.body = doc.appendChild(new FakeNode("body"))
+	doc.getElementById = (id) => walkFind(doc, id)
+	doc.querySelector = (selector) => doc.body.querySelector(selector)
+	doc.querySelectorAll = (selector) => doc.body.querySelectorAll(selector)
+	const pageRoot = doc.body.appendChild(new FakeNode("div"))
+	const header = pageRoot.appendChild(new FakeNode("div"))
+	const input = header.appendChild(new FakeNode("input"))
+	input.setAttribute("placeholder", "Session title")
+	input.value = "LAN session"
+	return { doc, header, input }
+}
+
+// PC: the keyboard offers Enter, so a confirm button would be noise.
+const desktopWindow = {
+	location: { pathname: "/chat", search: "" },
+	history: { pushState: () => {} },
+	dispatchEvent: () => true,
+	matchMedia: () => ({ matches: false }),
+}
+
+const desktop = makeRenameDoc()
+runLayer(desktop.doc, desktopWindow)
+check("PC gets no rename confirm button", walkFind(desktop.doc, "cline-lan-dashboard-ui-rename-confirm") === null)
+
+// Phone: Enter is hard to reach, so the confirm button must be there.
+const phoneRename = makeRenameDoc()
+runLayer(phoneRename.doc, phoneWindow)
+const phoneRenameButton = walkFind(phoneRename.doc, "cline-lan-dashboard-ui-rename-confirm")
+check("phone gets the rename confirm button", phoneRenameButton !== null)
+check("phone rename button sits right after the title input", phoneRename.input.nextSibling === phoneRenameButton)
 
 console.log(failures === 0 ? "\nall dashboard UI checks passed" : `\n${failures} check(s) failed`)
 process.exit(failures === 0 ? 0 : 1)

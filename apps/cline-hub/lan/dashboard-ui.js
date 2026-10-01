@@ -6,7 +6,7 @@
  *
  * Three things the stock dashboard does not offer:
  *   1. The Sessions tab has no way to start a new session.
- *   2. The session title input has no confirm button — the rename only lands
+ *   2. (phones only) The session title input has no confirm button — the rename
  *      on Enter, which mobile keyboards do not offer reliably.
  *   3. The trash button in the chat header deletes a session immediately,
  *      with no confirmation.
@@ -278,6 +278,20 @@
 	}
 
 	/**
+	 * Phone-shaped viewport (touch screen or a narrow window). The confirm
+	 * button only helps there: a PC keyboard offers Enter, and a stray button
+	 * in the chat header is noise. Mirrors the dashboard source's own touch
+	 * layout query (lib/use-touch-layout.ts).
+	*/
+	function isPhoneViewport() {
+		if (typeof window.matchMedia !== "function") return false;
+		return (
+			window.matchMedia("(pointer: coarse)").matches ||
+			window.matchMedia("(max-width: 820px)").matches
+		);
+	}
+
+	/**
 	 * The dashboard commits a renamed session on an Enter keydown (and on blur),
 	 * so the confirm button replays that keydown instead of writing the title
 	 * through a path of its own.
@@ -299,7 +313,7 @@
 	function syncRenameButton() {
 		const input = document.querySelector(TITLE_INPUT_SELECTOR);
 		const existing = document.getElementById(RENAME_BUTTON_ID);
-		if (!input || !input.parentNode) {
+		if (!input || !input.parentNode || !isPhoneViewport()) {
 			if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
 			return;
 		}

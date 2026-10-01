@@ -383,14 +383,15 @@ export function Composer({
 	const composerRef = useRef<HTMLDivElement>(null);
 
 	/**
-	 * Enter inserts a newline and sending goes through the send button.
+	 * Phones insert a newline on Enter and send through the bottom-right button;
+	 * everywhere else Enter keeps the dashboard's own submit-on-Enter behaviour.
 	 * `PromptInputTextarea` calls this handler before its own submit-on-Enter
 	 * logic and skips that logic when the default is prevented, so the phone's
 	 * on-screen keyboard can never eat a multi-line prompt.
 	 */
 	const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
 		const action = resolveEnterAction({
-			enterIsNewline: true,
+			enterIsNewline: touchLayout,
 			isComposing: event.nativeEvent.isComposing,
 			key: event.key,
 			keyCode: event.nativeEvent.keyCode,

@@ -427,7 +427,7 @@ function installPhoneUi(config) {
 			.join("\n  ");
 		writeFileSync(index, html.replace("</body>", `  ${tags}\n</body>`));
 	}
-	return "UI layer: 導入済み（新規セッションボタン / 名前確定 / 削除確認 / PC用送信ボタン）";
+	return "UI layer: 導入済み（新規セッションボタン / 名前確定[スマホのみ] / 削除確認）";
 }
 
 function uninstallPhoneUi(config) {
@@ -688,7 +688,7 @@ async function commandDoctor(config) {
 		[
 			"UI layer",
 			phoneUiInstalled(config)
-				? "導入済み（新規セッションボタン / 名前確定 / 削除確認 / PC用送信ボタン）"
+				? "導入済み（新規セッションボタン / 名前確定[スマホのみ] / 削除確認）"
 				: "未導入（start でビルド成果物に導入される）",
 		],
 		["session rename", sessionRenameState(config)],
