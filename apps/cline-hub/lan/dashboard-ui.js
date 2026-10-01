@@ -4,15 +4,12 @@
  * Injected into the dashboard's BUILD OUTPUT by start.cmd and removed again by
  * stop.cmd, so Cline's own source stays untouched.
  *
- * Four things the stock dashboard does not offer:
+ * Three things the stock dashboard does not offer:
  *   1. The Sessions tab has no way to start a new session.
  *   2. The session title input has no confirm button — the rename only lands
  *      on Enter, which mobile keyboards do not offer reliably.
  *   3. The trash button in the chat header deletes a session immediately,
  *      with no confirmation.
- *   4. The composer submits on Enter, which sends a half-typed prompt by
- *      accident (a Windows path like C:\temp\log stops at the first colon).
- *      Enter is remapped to a newline and sending moves to a 送信 button.
  *
  * All three are driven from the outside: the new-session button uses the
  * dashboard's own routing (the same pushState + popstate the app itself uses),
@@ -37,14 +34,6 @@
 	const DELETE_LABEL = "Delete session";
 	const CHAT_PATH = "/chat";
 	const CHAT_SESSION_QUERY_PARAM = "id";
-	const COMPOSER_SELECTOR = "form textarea";
-	const SEND_BUTTON_ID = "cline-lan-dashboard-ui-send";
-	const SEND_BUTTON_CLASS = "cline-lan-send";
-	const COMPOSER_MARK = "clineLanDashboardUiComposer";
-	// The phone layer owns the composer on touch screens; duplicating the
-	// newline handler there would insert two newlines per Enter.
-	const PHONE_MARK = "clineLanPhoneUi";
-	const PHONE_SEND_BUTTON_ID = "cline-lan-phone-ui-send";
 
 	/*
 	 * Every write below must be conditional. The MutationObserver installed in
@@ -152,30 +141,6 @@
 			".cline-lan-confirm-delete {",
 			"	background: var(--destructive, #cc3333);",
 			"	color: var(--destructive-foreground, #ffffff);",
-			"}",
-			".cline-lan-send {",
-			"\\talign-items: center;",
-			"\\tbackground: var(--primary, #1f1f23);",
-			"\\tborder: 1px solid var(--border, #d4d4d4);",
-			"\\tborder-radius: var(--radius, 0.5rem);",
-			"\\tcolor: var(--primary-foreground, #ffffff);",
-			"\\tcursor: pointer;",
-			"\\tdisplay: inline-flex;",
-			"\\tflex: 0 0 auto;",
-			"\\tfont: 500 13px/1.2 ui-sans-serif, system-ui, sans-serif;",
-			"\\tmargin-left: 6px;",
-			"\\tmin-height: 30px;",
-			"\\tpadding: 0 12px;",
-			"\\twhite-space: nowrap;",
-			"}",
-			".cline-lan-send:hover { opacity: 0.88; }",
-			".cline-lan-send:disabled { cursor: default; opacity: 0.45; }",
-			/* A narrow window must not push the send button past the right edge:
-			 * the composer footer row wraps onto a second line instead. */
-			"form:has(textarea) div:has(> button[type=\"submit\"]) { flex-wrap: wrap; }",
-			".cline-lan-send[data-generating=\"1\"] {",
-			"\\tbackground: var(--destructive, #cc3333);",
-			"\\tcolor: var(--destructive-foreground, #ffffff);",
 			"}",
 
 		].join("\n");
@@ -372,132 +337,12 @@
 		section.appendChild(button);
 	}
 
-	/* ------------------------------ composer keys ---------------------------- */
-	/*
-	 * The stock composer submits on Enter. That sends half-typed prompts by
-	 * accident — a Windows path like C:\temp\log stops at the first colon — so
-	 * Enter is remapped to a newline and sending moves to the 送信 button.
-	 *
-	 * The listener is registered in the capture phase on the textarea itself.
-	 * React delegates its key handler to the root container, so stopping
-	 * propagation at the textarea means the app's "Enter submits" handler never
-	 * runs. Shift+Enter and IME composition are left to the browser.
-	 */
-	function findComposer() {
-		const textarea = document.querySelector(COMPOSER_SELECTOR);
-		if (!textarea) return null;
-		const form = textarea.closest ? textarea.closest("form") : null;
-		return form ? { textarea, form } : null;
-	}
-
-	function findSubmit(form) {
-		if (!form) return null;
-		return (
-			form.querySelector('button[type="submit"]') ??
-			form.querySelector('button[aria-label="Submit"], button[aria-label="Stop"]') ??
-			null
-		);
-	}
-
-	/** The phone layer owns the composer on touch screens; skip its textarea. */
-	function phoneOwnsComposer(textarea) {
-		if (textarea.dataset[PHONE_MARK]) return true;
-		return Boolean(document.getElementById(PHONE_SEND_BUTTON_ID));
-	}
-
-	/**
-	 * Phone-shaped viewport (touch screen or a narrow window). The phone layer
-	 * puts a floating send button at the bottom-right there; an inline button in
-	 * the composer footer would overflow the narrow row and land past the right
-	 * edge, where it cannot be pressed.
-	 */
-	function isPhoneViewport() {
-		if (typeof window.matchMedia !== "function") return false;
-		return (
-			window.matchMedia("(pointer: coarse)").matches ||
-			window.matchMedia("(max-width: 820px)").matches
-		);
-	}
-
-	/** Insert a newline at the caret in a way React's onChange picks up. */
-	function insertNewline(textarea) {
-		const start = textarea.selectionStart ?? textarea.value.length;
-		const end = textarea.selectionEnd ?? textarea.value.length;
-		if (typeof textarea.focus === "function") textarea.focus();
-		// execCommand fires a real input event, so React state stays in sync.
-		try {
-			if (document.execCommand("insertText", false, "\n")) return;
-		} catch {}
-		const next = `${textarea.value.slice(0, start)}\n${textarea.value.slice(end)}`;
-		const proto = typeof HTMLTextAreaElement === "function" ? HTMLTextAreaElement.prototype : null;
-		const setter = proto ? Object.getOwnPropertyDescriptor(proto, "value")?.set : null;
-		if (setter) setter.call(textarea, next);
-		else textarea.value = next;
-		textarea.selectionStart = textarea.selectionEnd = start + 1;
-		textarea.dispatchEvent(new Event("input", { bubbles: true }));
-	}
-
-	function onComposerKeydown(event) {
-		if (event.key !== "Enter" || event.shiftKey) return;
-		if (event.isComposing || (event.nativeEvent && event.nativeEvent.isComposing)) return;
-		event.preventDefault();
-		event.stopPropagation();
-		insertNewline(event.currentTarget);
-	}
-
-	function syncSendButton() {
-		const dropButton = () => {
-			const stale = document.getElementById(SEND_BUTTON_ID);
-			if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
-		};
-
-		const found = findComposer();
-		if (!found || isPhoneViewport() || phoneOwnsComposer(found.textarea)) {
-			dropButton();
-			return;
-		}
-		const { textarea, form } = found;
-
-		if (!textarea.dataset[COMPOSER_MARK]) {
-			textarea.dataset[COMPOSER_MARK] = "1";
-			textarea.addEventListener("keydown", onComposerKeydown, true);
-			console.info("[cline-lan-dashboard-ui] Enter is now newline; use the send button to submit");
-		}
-
-		let button = document.getElementById(SEND_BUTTON_ID);
-		if (button && button.parentNode !== form) {
-			if (button.parentNode) button.parentNode.removeChild(button);
-			button = null;
-		}
-		if (!button) {
-			button = document.createElement("button");
-			button.id = SEND_BUTTON_ID;
-			button.type = "button";
-			button.className = SEND_BUTTON_CLASS;
-			button.addEventListener("click", (event) => {
-				event.preventDefault();
-				const current = findSubmit(findComposer()?.form ?? form);
-				if (current && current.disabled !== true) current.click();
-			});
-			const anchor = findSubmit(form);
-			if (anchor && anchor.parentNode === form) form.insertBefore(button, anchor.nextSibling);
-			else form.appendChild(button);
-		}
-
-		const submit = findSubmit(form);
-		const generating = Boolean(submit && submit.getAttribute("aria-label") === "Stop");
-		setData(button, "generating", generating ? "1" : "0");
-		setText(button, generating ? "停止" : "送信");
-		setAttribute(button, "aria-label", generating ? "Stop" : "Send");
-		setDisabled(button, !submit || submit.disabled === true);
-	}
 
 
 	function sync() {
 		syncNewSessionButton();
 		syncRenameButton();
-		syncSendButton();
-	}
+			}
 
 	function boot() {
 		ensureStyle();
@@ -516,7 +361,7 @@
 		}
 		setInterval(sync, 500);
 		console.info(
-			"[cline-lan-dashboard-ui] new-session + rename confirm + delete confirm + composer send installed",
+			"[cline-lan-dashboard-ui] new-session + rename confirm + delete confirm installed",
 		);
 	}
 

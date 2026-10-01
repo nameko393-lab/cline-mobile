@@ -292,5 +292,34 @@
 	[data-composer-footer] > div > div:last-child {
 		flex-shrink: 0;
 	}
+
+	/* Phone send control: pinned to the bottom-right so it stays under the
+	   thumb and above the keyboard safe area. The footer submit button is
+	   hidden on touch layouts (see Composer.tsx), so this is the only send
+	   affordance on a phone. */
+	.cline-phone-send {
+		align-items: center;
+		background: var(--primary);
+		bottom: calc(1rem + env(safe-area-inset-bottom));
+		box-shadow: 0 10px 28px rgb(0 0 0 / 40%);
+		color: var(--primary-foreground);
+		display: inline-flex;
+		font-weight: 500;
+		min-height: 2.75rem;
+		min-width: 4.5rem;
+		padding: 0 1.25rem;
+		position: fixed;
+		right: 1rem;
+		z-index: 50;
+	}
+
+	.cline-phone-send[data-generating="1"] {
+		background: var(--destructive);
+		color: var(--destructive-foreground);
+	}
+
+	.cline-phone-send:disabled {
+		opacity: 0.45;
+	}
 }
 

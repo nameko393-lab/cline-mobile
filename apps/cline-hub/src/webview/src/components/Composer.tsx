@@ -8,7 +8,7 @@ import {
 	SignalLow,
 	SignalMedium,
 } from "lucide-react";
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
 	Attachment,
@@ -380,6 +380,7 @@ export function Composer({
 	);
 	const ReasonIcon = reasonLevels[reasonLevelOption].icon;
 	const touchLayout = useTouchLayout();
+	const composerRef = useRef<HTMLDivElement>(null);
 
 	/**
 	 * Enter inserts a newline and sending goes through the send button.
@@ -412,7 +413,7 @@ export function Composer({
 	};
 
 	return (
-		<div className="border-t bg-background">
+		<div className="border-t bg-background" ref={composerRef}>
 			<PromptInput
 				accept="image/*,.txt,.md,.json,.ts,.tsx,.js,.jsx"
 				globalDrop
@@ -556,21 +557,51 @@ export function Composer({
 							</Badge>
 						</PromptInputTools>
 						<div className="flex items-center gap-2">
-							{sending ? (
+							{touchLayout ? null : sending ? (
 								<Button onClick={onAbort} type="button" variant="destructive">
-									{touchLayout ? "Stop" : "Abort"}
+									Abort
 								</Button>
 							) : null}
-							<PromptInputSubmit
-								className="shrink-0"
-								disabled={disabled || status.includes("Failed")}
-								status={sending ? "submitted" : "ready"}
-								variant="ghost"
-							/>
+							{touchLayout ? null : (
+								<PromptInputSubmit
+									className="shrink-0"
+									disabled={disabled || status.includes("Failed")}
+									status={sending ? "submitted" : "ready"}
+									variant="ghost"
+								/>
+							)}
 						</div>
 					</div>
 				</PromptInputFooter>
 			</PromptInput>
+			{touchLayout ? (
+				<button
+					aria-label={sending ? "Stop" : "Send"}
+					className="cline-phone-send"
+					data-cline-lan-phone-ui="1"
+					data-generating={sending ? "1" : "0"}
+					disabled={disabled || status.includes("Failed")}
+					id="cline-lan-phone-ui-send"
+					onClick={() => {
+						if (sending) {
+							onAbort()
+							return
+						}
+						const form = composerRef.current?.querySelector("form")
+						if (!form) {
+							return
+						}
+						if (typeof form.requestSubmit === "function") {
+							form.requestSubmit()
+							return
+						}
+						form.querySelector<HTMLButtonElement>('button[type="submit"]')?.click()
+					}}
+					type="button"
+				>
+					{sending ? "停止" : "送信"}
+				</button>
+			) : null}
 		</div>
 	);
 }

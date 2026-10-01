@@ -177,7 +177,8 @@ Enter の扱い・送信ボタン・画面サイズはダッシュボード本�
 | Enter | 改行（送信はしない） | `src/webview/src/lib/composer-keyboard.ts` |
 | Shift+Enter | 従来どおり改行（ブラウザに委譲） | 同上 |
 | 日本語入力 | IME 変換確定の Enter をそのまま尊重 | 同上 |
-| 送信 | 本体の送信ボタン（タッチ画面では **停止** ラベルに変わる） | `src/webview/src/components/Composer.tsx` |
+| 送信（PC） | 本体の送信ボタン（フッター右のアイコン） | `src/webview/src/components/Composer.tsx` |
+| 送信（スマホ） | 画面の**右下に固定**した送信ボタン。送信中は **停止** になり、押すと中止。タッチ画面ではフッターの送信ボタンは隠れる | 同上 + `src/webview/src/index.css`（`.cline-phone-send`） |
 | 画面 | 横スクロール禁止・セーフエリア余白・タップ目標 40px・入力 16px（iOS のフォーカス時ズーム防止） | `src/webview/src/index.css`（`@media (pointer: coarse)`）+ `index.html` の `viewport-fit=cover` |
 | 判定 | `matchMedia("(pointer: coarse)")` | `src/webview/src/lib/use-touch-layout.ts` |
 | `session not found` | hub に読み込み直して会話を継ぐ（下記） | `src/webview/src/lib/session-recovery.ts` |
@@ -194,11 +195,11 @@ Enter の扱い・送信ボタン・画面サイズはダッシュボード本�
 
 | ファイル | 有効になる環境 |
 |---|---|
-| `dashboard-ui.js` | PC / スマホ共通（`pointer: coarse` / 820px 以下では入力欄と送信ボタンをソース側に譲る） |
+| `dashboard-ui.js` | PC / スマホ共通（入力欄・送信ボタンには一切触れない。送信はすべてソース側） |
 
 ### ダッシュボード用の追加（`dashboard-ui.js`）
 
-ダッシュボード本体に無い 4 つを足します（ダッシュボード自身のルーティングと
+ダッシュボード本体に無い 3 つを足します（ダッシュボード自身のルーティングと
 ボタン発火だけを駆動する外側の層です）。
 
 | 項目 | 挙動 |
@@ -206,7 +207,7 @@ Enter の扱い・送信ボタン・画面サイズはダッシュボード本�
 | Sessions タブ | 見出しの右に**新規セッション**ボタン。押すとダッシュボード自身の画面遷移でセッション無し状態のチャットを開く（`?roomSecret=` 等のクエリは維持し、`?id=` だけ外す） |
 | セッション名 | 入力欄の右に**確定**ボタン。押すとダッシュボード自身の Enter 確定（リネーム）が走る。スマホのキーボードは Enter が出しにくいための補完 |
 | 削除ボタン | 会話画面のゴミ箱を押すと**確認ダイアログ**（セッション名を表示）。「削除」で本体の削除が走る。キャンセル・背景クリック・Esc で閉じると何も起きない |
-| 入力欄（composer） | Enter は**改行のみ**で送信しない。Shift+Enter と IME 変換確定の Enter は従来どおり。送信は本体の送信ボタンの右に出る**送信**ボタン（送信中は**停止**）で行う |
+| 入力欄（composer） | **触れない**。Enter も送信ボタンもソース側だけの扱い（PC は本体の送信ボタン、スマホは右下の固定ボタン） |
 
 - 色はダッシュボード自身の CSS 変数（`--background` 等）を使う。これらは `oklch()`
   値なので**そのまま色の値として**参照する（`hsl(var(--background))` は不正な指定に
@@ -215,9 +216,8 @@ Enter の扱い・送信ボタン・画面サイズはダッシュボード本�
   リセットするため、focus すると入力中の内容が消えて確定が空振りになる。Enter
   キーダウンだけをリプレイし、入力欄がフォーカス中のときだけ blur する
 - Sessions タブの行末メニューの Delete はダッシュボード本体の確認ダイアログが既にあり、そのままです
-- **Enter の処理は 1 層だけ**：入力欄の Enter はソース側（`composer-keyboard.ts`）が処理する。`dashboard-ui.js` は `pointer: coarse` / 820px 以下の画面では入力欄にも送信ボタンにも触れない（Enter 1 回で改行が 2 個入るのを防ぐ）
-- PC 側も composer 行に `flex-wrap: wrap` を入れて、狭い窓では行が折り返される
-- 検証: `bun run -F @cline/cline-hub test:lan`（ヘッドレス DOM で新規セッション遷移 / 確定ボタン / 削除確認 / キャンセル / Enter=改行 / 送信ボタン / ソース側との排他を再現）
+- **Enter と送信は 1 層だけ**：入力欄の Enter も送信ボタンもソース側（`composer-keyboard.ts` と `Composer.tsx`）だけが扱う。`dashboard-ui.js` は入力欄・送信ボタンに一切触れない（Enter 1 回で改行が 2 個入る重複処理を防ぐ）
+- 検証: `bun run -F @cline/cline-hub test:lan`（ヘッドレス DOM で新規セッション遷移 / 確定ボタン / 削除確認 / キャンセル / 注入層が入力欄に触れないこと / ソース側との排他を再現）
 - `bun run build:webview` を実行すると注入は消えるので、次回 `start` で再導入されます
 - 注入した JS はブラウザがキャッシュします。`start` ごとにタグの `?v=`（注入ファイルの
   更新時刻＋サイズ）が変わるので、**通常のリロードだけで新しい版が読めます**

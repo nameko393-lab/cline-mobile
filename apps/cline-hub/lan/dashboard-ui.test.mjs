@@ -338,10 +338,6 @@ check(
 	findById("cline-lan-dashboard-ui-css").textContent.includes("var(--background") &&
 		!findById("cline-lan-dashboard-ui-css").textContent.includes("hsl(var("),
 )
-check(
-	"composer footer row wraps instead of pushing the send button off screen",
-	findById("cline-lan-dashboard-ui-css").textContent.includes("flex-wrap: wrap"),
-)
 
 const newSessionButton = findById("cline-lan-dashboard-ui-new-session")
 check("new session button added to the Sessions header", Boolean(newSessionButton))
@@ -388,6 +384,11 @@ check("rename button blurs a focused input so the app commits once", titleBlurCa
 documentNode.activeElement = null
 
 /* -------------------------------- composer --------------------------------- */
+/*
+	* The injected layer no longer touches the composer: the PC dashboard keeps
+	* its native Enter-to-send, and the phone send button lives in the dashboard
+	* source (Composer.tsx) as a button pinned to the bottom-right.
+*/
 
 const pressEnter = (init = {}) => {
 	const event = new KeyboardEvent("keydown", { key: "Enter", ...init })
@@ -395,59 +396,37 @@ const pressEnter = (init = {}) => {
 	return event
 }
 
-const promptWithNewline = "C:\\temp\\log\n"
-
-const sendButton = findById("cline-lan-dashboard-ui-send")
-check("composer send button added", Boolean(sendButton))
-check(
-	"composer send button sits right after the app submit button",
-	sendButton?.parentNode === composerForm && sendButton?.previousSibling === composerSubmit,
-)
-check("composer send button label is 送信", sendButton?.textContent === "送信")
-check("composer send button is labelled Send for assistive tech", sendButton?.getAttribute("aria-label") === "Send")
-check("Enter handler is registered once on the textarea", (composerTextarea._listeners.keydown ?? []).length === 1)
-check("Enter handler is registered in the capture phase", (composerTextarea._listeners.keydown ?? [])[0]?.capture === true)
+check("no send button is injected into the composer", findById("cline-lan-dashboard-ui-send") === null)
+check("no Enter handler is registered on the composer textarea", (composerTextarea._listeners.keydown ?? []).length === 0)
 
 const enterEvent = pressEnter()
-check("Enter inserts a newline in the prompt", composerTextarea.value === promptWithNewline)
-check("Enter is preventDefault-ed so the browser inserts nothing extra", enterEvent.defaultPrevented)
-check("Enter never reaches the app key handler on the React root", rootKeydowns === 0)
-check("Enter never clicks the app submit button", composerSubmit.clicks === 0)
+check("Enter is left to the app (not preventDefault-ed)", !enterEvent.defaultPrevented)
+check("Enter reaches the app key handler on the React root", rootKeydowns === 1)
+check("Enter does not click the app submit button", composerSubmit.clicks === 0)
 
 const shiftEnter = pressEnter({ shiftKey: true })
-check("Shift+Enter is left to the browser", !shiftEnter.defaultPrevented && composerTextarea.value === promptWithNewline)
-check("Shift+Enter reaches the app key handler", rootKeydowns === 1)
+check("Shift+Enter is left to the browser", !shiftEnter.defaultPrevented)
+check("Shift+Enter reaches the app key handler", rootKeydowns === 2)
 
 const imeEnter = pressEnter({ isComposing: true })
-check("IME composition Enter is left alone", !imeEnter.defaultPrevented && composerTextarea.value === promptWithNewline)
-check("IME composition Enter reaches the app key handler", rootKeydowns === 2)
-
-sendButton?.click()
-check("send button drives the app submit button", composerSubmit.clicks === 1)
-
-composerSubmit.setAttribute("aria-label", "Stop")
-refreshUi()
-check("send button reads 停止 while the session is generating", findById("cline-lan-dashboard-ui-send")?.textContent === "停止")
-composerSubmit.setAttribute("aria-label", "Submit")
-refreshUi()
-check("send button reads 送信 again when generation ends", findById("cline-lan-dashboard-ui-send")?.textContent === "送信")
-check("Enter handler stays single after re-sync", (composerTextarea._listeners.keydown ?? []).length === 1)
+check("IME composition Enter is left alone", !imeEnter.defaultPrevented)
+check("IME composition Enter reaches the app key handler", rootKeydowns === 3)
 
 /* Regression: the page re-syncs through a MutationObserver, and assigning
  * textContent replaces the child list even when the string is identical. An
  * unconditional write inside sync therefore re-triggers the observer, which
- * calls sync again - the self-feeding loop that pegged the main thread and froze
- * the PC dashboard the moment a chat view opened. */
-const sendNodeForWrites = findById("cline-lan-dashboard-ui-send")
+ * calls sync again - the self-feeding loop that pegged the main thread and
+ * froze the PC dashboard the moment a chat view opened. */
+const watchedNode = findById("cline-lan-dashboard-ui-new-session")
+const watchedLabel = watchedNode?.textContent ?? ""
 let layerDomWrites = 0
-if (sendNodeForWrites) {
-	const currentLabel = sendNodeForWrites.textContent
-	Object.defineProperty(sendNodeForWrites, "textContent", {
+if (watchedNode) {
+	Object.defineProperty(watchedNode, "textContent", {
 		configurable: true,
-		get: () => currentLabel,
+		get: () => watchedLabel,
 		set: () => {
 			layerDomWrites += 1
-		},
+		}
 	})
 }
 refreshUi()
@@ -456,17 +435,14 @@ check(
 	`repeated sync with no page change writes nothing to the DOM (writes=${layerDomWrites})`,
 	layerDomWrites === 0,
 )
-check(
-	"send button keeps its label across no-op syncs",
-	sendNodeForWrites?.textContent === "送信",
-)
+check("new session button keeps its label across no-op syncs", watchedNode?.textContent === watchedLabel)
 check(
 	"our own mutations do not trigger a re-sync",
 	(() => {
 		const ourNode = documentNode.createElement("div")
 		ourNode.setAttribute("data-cline-lan-dashboard-ui", "1")
 		observers.forEach((observer) => observer.callback([{ target: ourNode }]))
-		return sendNodeForWrites?.textContent === "送信" && layerDomWrites === 0
+		return watchedNode?.textContent === watchedLabel && layerDomWrites === 0
 	})(),
 )
 
