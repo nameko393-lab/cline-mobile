@@ -6,7 +6,9 @@ import {
 import type { WebviewHubEvent } from "../webview-protocol";
 import type {
 	BrowserPeer,
+	PendingQuestion,
 	PendingToolApproval,
+	RemoteQuestion,
 	SessionContext,
 	TrackedClient,
 	TrackedSession,
@@ -22,6 +24,8 @@ export class HubContext {
 	readonly clients = new Map<string, TrackedClient>();
 	readonly sessions = new Map<string, TrackedSession>();
 	readonly pendingToolApprovals = new Map<string, PendingToolApproval>();
+	readonly pendingQuestions = new Map<string, PendingQuestion>();
+	readonly remoteQuestions = new Map<string, RemoteQuestion>();
 	readonly events: WebviewHubEvent[] = [];
 
 	hubUrl = "";

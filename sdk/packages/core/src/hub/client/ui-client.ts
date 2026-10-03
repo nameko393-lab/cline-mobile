@@ -1,6 +1,8 @@
 import type {
 	HubClientRecord,
+	HubCommandEnvelope,
 	HubEventEnvelope,
+	HubReplyEnvelope,
 	HubSessionSearchHit,
 	HubUINotifyPayload,
 	HubUIShowWindowPayload,
@@ -111,6 +113,34 @@ export class HubUIClient {
 			throw new Error(reply.error?.message ?? "settings.toggle failed");
 		}
 		return reply.payload as unknown as CoreSettingsMutationResult;
+	}
+
+	/**
+	 * Subscribe to every hub event, not just the UI-relevant subset.
+	 *
+	 * Dashboards use this to mirror interactive state that is owned by another
+	 * client — e.g. the `capability.requested` event carrying a follow-up
+	 * question raised inside a session created by Cline Desktop.
+	 * Returns an unsubscribe function.
+	 */
+	subscribeToEvents(handler: (event: HubEventEnvelope) => void): () => void {
+		return this.client.subscribe(handler);
+	}
+
+	/**
+	 * Send an arbitrary hub command from this client.
+	 *
+	 * The typed helpers above cover UI concerns; this is the escape hatch for
+	 * clients that answer hub interactions on behalf of a browser surface
+	 * (`approval.respond`, `capability.respond`, `run.abort`, ...).
+	 */
+	async sendCommand(
+		command: HubCommandEnvelope["command"],
+		payload?: Record<string, unknown>,
+		sessionId?: string,
+	): Promise<HubReplyEnvelope> {
+		await this.client.connect();
+		return this.client.command(command, payload, sessionId);
 	}
 
 	/**

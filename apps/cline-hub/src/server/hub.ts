@@ -15,6 +15,12 @@ import {
 import { configureConnectorCliLaunch } from "./connectors";
 import { workspaceRoot } from "./deps";
 import {
+	observeHubEventForQuestions,
+	QUESTION_ANSWER_HUB_DETACHED,
+	resolveAllPendingQuestions,
+	requestQuestionFromWebview,
+} from "./questions";
+import {
 	formatClientDetails,
 	formatSessionCreator,
 	parseSessionContext,
@@ -103,6 +109,17 @@ export async function attachHub(ctx: HubContext): Promise<void> {
 		capabilities: {
 			requestToolApproval: (request) =>
 				requestToolApprovalFromWebview(ctx, request),
+			// Registering the askQuestion executor is what makes the
+			// `ask_question` (ask_followup_question) tool exist for sessions
+			// this dashboard owns; the hub proxies the call back here.
+			toolExecutors: {
+				askQuestion: (question, options, context) =>
+					requestQuestionFromWebview(ctx, {
+						sessionId: context.sessionId ?? "",
+						question,
+						options,
+					}),
+			},
 		},
 		hub: {
 			endpoint: ctx.hubUrl,
@@ -220,6 +237,13 @@ export async function attachHub(ctx: HubContext): Promise<void> {
 		},
 	});
 
+	// Follow-up questions raised inside sessions owned by other hub clients
+	// (Cline Desktop, CLI) reach every subscriber as a broadcast capability
+	// request. Mirror them so a browser peer can see and answer them.
+	ctx.uiClient.subscribeToEvents((event) => {
+		observeHubEventForQuestions(ctx, event);
+	});
+
 	ctx.cline.subscribe((event) => handleSessionEvent(ctx, event));
 
 	await syncHubClientsAndSessions(ctx);
@@ -231,6 +255,7 @@ export async function detachHub(ctx: HubContext): Promise<void> {
 		ctx,
 		"Hub disconnected before approval was resolved.",
 	);
+	resolveAllPendingQuestions(ctx, QUESTION_ANSWER_HUB_DETACHED);
 	for (const peer of ctx.peers) {
 		peer.unsubscribeEvents?.();
 		peer.unsubscribeEvents = undefined;

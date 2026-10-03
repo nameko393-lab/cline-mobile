@@ -66,6 +66,29 @@ export type PendingToolApproval = {
 	timeout: ReturnType<typeof setTimeout>;
 };
 
+/**
+ * A follow-up question raised inside a session this dashboard owns. The agent
+ * is parked on the `ask_question` tool until `resolve` runs.
+ */
+export type PendingQuestion = {
+	sessionId: string;
+	resolve: (answer: string) => void;
+	timeout: ReturnType<typeof setTimeout>;
+};
+
+/**
+ * A follow-up question raised inside a session owned by another hub client
+ * (Cline Desktop / CLI). The dashboard mirrors it to its browser peers and
+ * relays the answer back to the hub.
+ */
+export type RemoteQuestion = {
+	sessionId: string;
+	requestId: string;
+	targetClientId: string;
+	question: string;
+	options: string[];
+};
+
 export type JsonRecord = Record<string, unknown>;
 
 export type { WebviewReasonLevel };

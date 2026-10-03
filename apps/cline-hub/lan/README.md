@@ -263,6 +263,26 @@ await ctx.cline.update(frame.sessionId, {
   ダッシュボード本来のブラウザプロトコルでセッション名を書き換え、push されるセッション
   一覧に新しい名前が乗ることを確認します。確認後は `--title="<元の名前>"` で戻してください
 
+## 質問（ask_followup_question）はスマホからも PC ブラウザからも答えられる
+
+エージェントが `ask_followup_question` で質問を出すと、ダッシュボードはチャット下に
+選択肢ボタンと自由入力の送信欄を持つ**質問カード**を出します。
+
+- **ダッシュボードで作ったセッション**: ダッシュボードが `askQuestion` エグゼキュータを
+  hub に提供しているので、質問がそのまま飛んできて、回答でその場のターンが再開します
+- **desktop / CLI が作ったセッション**: hub がブロードキャストする
+  `capability.requested`（`tool_executor.askQuestion`）を見て表示します。回答は
+  `capability.respond` で hub に中継し、hub が所有者以外からの回答を拒否した場合は
+  止まっているターンを `run.abort` して**回答を次のプロンプトとして同じセッションに送ります**
+  （プロンプト送信はセッション一覧の自動読み直しと同じ経路なので、hub がメモリに持つ
+  セッションに届きます）
+
+desktop 側は無変更で動きます。desktop 画面で同じ質問に同時に答えると回答が 2 回届くので、
+どちらか一方だけから回答してください。
+
+実装: `src/server/questions.ts` / `src/webview/src/Chat.tsx` / `src/server/sessions.ts`
+（`sendAnswerAsPrompt`）。検証: `bun run -F @cline/cline-hub test`。
+
 ## 実測で確定した制約
 
 1. **本番ビルドで動かす**: `CLINE_BUILD_ENV=development` を設定すると dev hub
@@ -309,6 +329,7 @@ PC ブラウザからも同じように効きます。
 | `session not found` | 自動でそのセッションを hub に読み込み直して送り直す（上のセクション）。トーストが出ないまま失敗するだけなら、セッション一覧が届くのを待って再送 |
 | 送信ボタンが無い / Enter で送信される | ソース版がビルドされていない。`cd apps\cline-hub && bun run build:webview` してリロード（`doctor` の `webview dist` を確認） |
 | 送信ボタンが右にはみ出して押せない | ビルドが古い（`flex-wrap` / セーフエリアの規則がない）。`bun run build:webview` し直してリロードする |
+| 質問カードが出るが回答できない | そのセッションの質問は他のクライアント（desktop）所有。カードは中継で回答する（`Answer sent to Cline.` / `Answer delivered as a prompt` のステータスを確認）。ステータスが出ない場合は hub と desktop の稼働を確認 |
 | 新規セッションボタン / 削除確認が出ない | `dashboard-ui.js` 未導入。`doctor` で `UI layer` を確認し `start` し直す |
 | 確認ダイアログが半透明・読みにくい | 注入が古い版。`start` し直して `assets/cline-lan-dashboard-ui.js` を更新（`oklch()` の変数を `hsl()` で包むと透明になる） |
 

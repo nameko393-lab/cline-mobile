@@ -42,8 +42,14 @@ import {
 	resetPeer,
 	restorePeerSession,
 	selectSession,
+	sendAnswerAsPrompt,
 	sendMessage,
 } from "./server/sessions";
+import {
+	answerRemoteQuestion,
+	handleLocalQuestionResponse,
+	resolveOrphanedQuestions,
+} from "./server/questions";
 import { HubContext } from "./server/state";
 import { broadcastHubState, hubStatusPayload } from "./server/state-payloads";
 import type { BrowserFrame, BrowserPeer } from "./server/types";
@@ -214,6 +220,17 @@ export async function startClineHubDashboardServer(): Promise<ClineHubDashboardS
 						broadcastHubState(ctx);
 					} else if (frame.type === "approval_response") {
 						handleToolApprovalResponse(ctx, frame);
+					} else if (frame.type === "question_response") {
+						const handled = handleLocalQuestionResponse(ctx, frame);
+						if (!handled) {
+							await answerRemoteQuestion(
+								ctx,
+								frame.questionId,
+								frame.answer,
+								(sessionId, answer) =>
+									sendAnswerAsPrompt(ctx, sessionId, answer),
+							);
+						}
 					} else if (frame.type === "abort") {
 						await abortPeerTurn(ctx, peer);
 					} else if (frame.type === "reset") {
@@ -262,6 +279,7 @@ export async function startClineHubDashboardServer(): Promise<ClineHubDashboardS
 				peer.unsubscribeEvents?.();
 				ctx.peers.delete(peer);
 				rejectOrphanedApprovals(ctx);
+				resolveOrphanedQuestions(ctx);
 			},
 		},
 	});

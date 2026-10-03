@@ -371,6 +371,14 @@ export interface ListSessionsOptions {
  */
 export interface RuntimeHost {
 	readonly runtimeAddress?: string;
+	/**
+	 * Hub client id this host registers with, when it runs sessions on a hub.
+	 * Capability requests are broadcast to every hub subscriber and answered by
+	 * the targeted client, so a host that also observes the raw hub event
+	 * stream needs this to recognise its own requests. Optional: hosts that run
+	 * sessions in-process have no hub identity.
+	 */
+	getHubClientId?(): string | undefined;
 	startSession(input: StartSessionInput): Promise<StartSessionResult>;
 	runTurn(input: SendSessionInput): Promise<AgentResult | undefined>;
 	restoreSession(input: RestoreSessionInput): Promise<RestoreSessionResult>;

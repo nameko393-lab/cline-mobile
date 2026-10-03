@@ -865,6 +865,16 @@ export class HubRuntimeHost implements RuntimeHost {
 		await this.client.connect();
 	}
 
+	/**
+	 * The hub client id this host registers with. Hub capability requests are
+	 * broadcast to every subscriber and then answered by the targeted client,
+	 * so a client that also observes the raw event stream needs to tell its own
+	 * requests apart from other clients'.
+	 */
+	getHubClientId(): string | undefined {
+		return this.client.getClientId();
+	}
+
 	async startSession(input: StartSessionInput): Promise<StartSessionResult> {
 		const capabilities = this.resolveCapabilities(input);
 		const clientContributions = buildClientContributionRegistration(

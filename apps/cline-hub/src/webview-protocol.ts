@@ -108,6 +108,32 @@ export type WebviewToolApprovalRequest = {
 	policy?: Record<string, unknown>;
 };
 
+/**
+ * A follow-up question (`ask_question` / `ask_followup_question`) the agent is
+ * waiting on. Peers render it as selectable options plus a free-form answer.
+ *
+ * `remote` marks a question raised inside a session owned by another hub
+ * client (Cline Desktop, the CLI). The hub routes that question to its owning
+ * client, so answering from the browser is a best effort: the dashboard relays
+ * the answer, and when the hub refuses a non-owner answer it aborts the
+ * blocked turn and delivers the answer as the next prompt.
+ */
+export type WebviewQuestionRequest = {
+	type: "question_request";
+	questionId: string;
+	sessionId: string;
+	question: string;
+	options: string[];
+	remote?: boolean;
+	createdAt?: number;
+};
+
+export type WebviewQuestionResolved = {
+	type: "question_resolved";
+	questionId: string;
+	answer?: string;
+};
+
 export type WebviewDefaults = {
 	provider?: string;
 	model?: string;
@@ -266,6 +292,11 @@ export type WebviewInboundMessage =
 			approved: boolean;
 			reason?: string;
 	  }
+	| {
+			type: "question_response";
+			questionId: string;
+			answer: string;
+	  }
 	| { type: "loadModels"; providerId: string }
 	| { type: "loadProviderCatalog" }
 	| {
@@ -327,6 +358,8 @@ export type WebviewOutboundMessage =
 			approved: boolean;
 			reason?: string;
 	  }
+	| WebviewQuestionRequest
+	| WebviewQuestionResolved
 	| {
 			type: "turn_done";
 			finishReason: string;

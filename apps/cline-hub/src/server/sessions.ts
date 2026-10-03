@@ -9,6 +9,7 @@ import type { MessageWithMetadata } from "@cline/llms";
 import type { WebviewConfig, WebviewReasonLevel } from "../webview-protocol";
 import { rejectPendingApprovalsForSession } from "./approvals";
 import { providerSettingsManager, workspaceRoot } from "./deps";
+import { QUESTION_ANSWER_ABORTED, resolveQuestionsForSession } from "./questions";
 import {
 	loadProviders,
 	resolveBrowserDefaults,
@@ -431,8 +432,51 @@ export async function abortPeerTurn(
 		peer.selectedSessionId,
 		"Turn aborted before approval was resolved.",
 	);
+	resolveQuestionsForSession(
+		ctx,
+		peer.selectedSessionId,
+		QUESTION_ANSWER_ABORTED,
+	);
 	await ctx.cline.abort(peer.selectedSessionId);
 	ctx.send(peer, { type: "status", text: "Abort requested." });
+}
+
+/**
+ * Deliver a follow-up answer to a session this dashboard does not own.
+ *
+ * The hub parks that session's turn on the owning client's `askQuestion`
+ * executor and refuses `capability.respond` from anyone else, so the answer is
+ * delivered the way the dashboard delivers everything else to such sessions:
+ * abort the parked turn (which cancels the pending capability request
+ * hub-side), then send the answer as the next prompt in the same session.
+ *
+ * Returns an error string when the prompt could not be delivered.
+ */
+export async function sendAnswerAsPrompt(
+	ctx: HubContext,
+	sessionId: string,
+	answer: string,
+): Promise<string | undefined> {
+	if (!ctx.cline) return "Hub is not connected.";
+	resolveQuestionsForSession(ctx, sessionId, QUESTION_ANSWER_ABORTED);
+	try {
+		await ctx.cline.abort(sessionId);
+	} catch (error) {
+		// The turn may already be finished; the prompt below is what matters.
+		console.warn(`abort(${sessionId}) failed:`, error);
+	}
+	const session = await ctx.cline.get(sessionId);
+	const metadata =
+		session?.metadata && typeof session.metadata === "object"
+			? (session.metadata as Record<string, unknown>)
+			: {};
+	const mode = metadata.mode === "plan" ? "plan" : "act";
+	try {
+		await ctx.cline.send({ sessionId, prompt: answer, mode });
+		return undefined;
+	} catch (error) {
+		return error instanceof Error ? error.message : String(error);
+	}
 }
 
 export async function forkPeerSession(

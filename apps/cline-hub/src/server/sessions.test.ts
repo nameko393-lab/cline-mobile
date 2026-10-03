@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HubContext } from "./state";
-import { loadSessionIntoMemory, sendMessage } from "./sessions";
+import { loadSessionIntoMemory, sendAnswerAsPrompt, sendMessage } from "./sessions";
 import type { BrowserPeer } from "./types";
 
 /**
@@ -41,8 +41,10 @@ type FakeCline = {
 	readMessages: (sessionId: string) => Promise<unknown[]>;
 	start: (input: Record<string, unknown>) => Promise<{ sessionId: string }>;
 	send: (input: { sessionId: string; prompt: string }) => Promise<void>;
+	abort: (sessionId: string) => Promise<void>;
 	startInputs: Record<string, unknown>[];
 	sentPrompts: { sessionId: string; prompt: string }[];
+	aborted: string[];
 };
 
 function makeCline(options: { liveSessionIds?: string[] } = {}): FakeCline {
@@ -50,6 +52,10 @@ function makeCline(options: { liveSessionIds?: string[] } = {}): FakeCline {
 	const cline: FakeCline = {
 		startInputs: [],
 		sentPrompts: [],
+		aborted: [],
+		abort: async (sessionId: string) => {
+			cline.aborted.push(sessionId);
+		},
 		get: async (sessionId: string) => {
 			if (sessionId === SOURCE_SESSION_ID) return sourceRecord;
 			if (live.has(sessionId))
@@ -206,5 +212,53 @@ describe("sending to a disk-only session", () => {
 			sendMessage(ctx, peer, "続きをやって", { mode: "act" }),
 		).rejects.toThrow("provider exploded");
 		expect(cline.startInputs.length).toBe(0);
+	});
+});
+
+/**
+ * A follow-up question raised inside a session owned by Cline Desktop parks
+ * that desktop's askQuestion executor, and the hub refuses an answer from any
+ * other client. The dashboard delivers the answer the way it delivers every
+ * other prompt to such a session: abort the parked turn, then send the answer.
+ */
+describe("delivering a follow-up answer to a foreign session", () => {
+	it("aborts the parked turn and sends the answer as the next prompt", async () => {
+		const cline = makeCline({ liveSessionIds: [SOURCE_SESSION_ID] });
+		const ctx = makeContext(cline);
+
+		const failure = await sendAnswerAsPrompt(
+			ctx,
+			SOURCE_SESSION_ID,
+			"本番デプロイで進めて",
+		);
+
+		expect(failure).toBeUndefined();
+		expect(cline.aborted).toEqual([SOURCE_SESSION_ID]);
+		expect(cline.sentPrompts).toEqual([
+			{ sessionId: SOURCE_SESSION_ID, prompt: "本番デプロイで進めて" },
+		]);
+	});
+
+	it("keeps the stored plan mode for the answer turn", async () => {
+		const cline = makeCline({ liveSessionIds: [SOURCE_SESSION_ID] });
+		const sentModes: unknown[] = [];
+		cline.send = async (input: { sessionId: string; prompt: string }) => {
+			sentModes.push((input as unknown as Record<string, unknown>).mode);
+			cline.sentPrompts.push({ sessionId: input.sessionId, prompt: input.prompt });
+		};
+		const ctx = makeContext(cline);
+
+		await sendAnswerAsPrompt(ctx, SOURCE_SESSION_ID, "了解");
+
+		expect(sentModes).toEqual(["plan"]);
+	});
+
+	it("reports a prompt that the hub refused", async () => {
+		const cline = makeCline({ liveSessionIds: [] });
+		const ctx = makeContext(cline);
+
+		const failure = await sendAnswerAsPrompt(ctx, SOURCE_SESSION_ID, "了解");
+
+		expect(failure).toContain("session not found");
 	});
 });

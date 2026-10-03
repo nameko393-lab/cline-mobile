@@ -2,6 +2,7 @@ import type { CoreSessionEvent } from "@cline/core";
 import type { AgentEvent } from "@cline/shared";
 import type { WebviewToolEvent } from "../webview-protocol";
 import { rejectPendingApprovalsForSession } from "./approvals";
+import { QUESTION_ANSWER_SESSION_ENDED, resolveQuestionsForSession } from "./questions";
 import type { HubContext } from "./state";
 import { broadcastHubState } from "./state-payloads";
 import { asString, chunkText } from "./utils";
@@ -174,6 +175,11 @@ export function handleSessionEvent(
 			ctx,
 			sessionId,
 			"Session ended before approval was resolved.",
+		);
+		resolveQuestionsForSession(
+			ctx,
+			sessionId,
+			QUESTION_ANSWER_SESSION_ENDED,
 		);
 		const tracked = ctx.sessions.get(sessionId);
 		if (tracked) {

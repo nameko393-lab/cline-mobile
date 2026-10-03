@@ -652,6 +652,16 @@ export class ClineCore {
 		return this.host.hasSessionSubscription?.(sessionId) ?? false;
 	}
 	/**
+	 * The hub client id this instance registers with, when it runs sessions on
+	 * a hub. Hub capability requests are broadcast to every subscriber and
+	 * answered by the targeted client, so a client that also observes the raw
+	 * hub event stream uses this to tell its own requests apart from other
+	 * clients'. Undefined for hosts that run sessions in-process.
+	 */
+	getHubClientId(): string | undefined {
+		return this.host.getHubClientId?.();
+	}
+	/**
 	 * Updates the AI model used by an active session.
 	 *
 	 * Switches the session to use a different AI model while maintaining the session state

@@ -80,6 +80,10 @@ type PendingApproval = Extract<
 	WebviewOutboundMessage,
 	{ type: "approval_request" }
 > & { responding?: boolean };
+type PendingQuestion = Extract<
+	WebviewOutboundMessage,
+	{ type: "question_request" }
+> & { responding?: boolean };
 type ModelSelectionStorage = {
 	lastProvider: string;
 	lastModelByProvider: Record<string, string>;
@@ -691,6 +695,12 @@ export default function Chat({
 	const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>(
 		[],
 	);
+	const [pendingQuestions, setPendingQuestions] = useState<PendingQuestion[]>(
+		[],
+	);
+	const [questionAnswerDraft, setQuestionAnswerDraft] = useState<
+		Record<string, string>
+	>({});
 	const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
 	const [titleEditing, setTitleEditing] = useState(false);
 	const [forking, setForking] = useState(false);
@@ -720,6 +730,7 @@ export default function Chat({
 			setMessages([]);
 			setSending(false);
 			setPendingApprovals([]);
+			setPendingQuestions([]);
 			activeAssistantIdRef.current = undefined;
 			setStatus(`Loading chat history for ${nextSessionId}...`);
 			onSessionSelected?.(nextSessionId);
@@ -966,10 +977,33 @@ export default function Chat({
 						current.filter((item) => item.approvalId !== message.approvalId),
 					);
 					return;
+				case "question_request":
+					setPendingQuestions((current) => {
+						const existingIndex = current.findIndex(
+							(item) => item.questionId === message.questionId,
+						);
+						const next = { ...message, responding: false };
+						if (existingIndex === -1) {
+							return [...current, next];
+						}
+						return current.map((item, index) =>
+							index === existingIndex ? next : item,
+						);
+					});
+					setStatus("Cline is waiting for your answer");
+					return;
+				case "question_resolved":
+					setPendingQuestions((current) =>
+						current.filter(
+							(item) => item.questionId !== message.questionId,
+						),
+					);
+					return;
 				case "turn_done":
 					setStatus(`Done (${message.finishReason})`);
 					setSending(false);
 					setPendingApprovals([]);
+					setPendingQuestions([]);
 					activeAssistantIdRef.current = undefined;
 					setMessages((current) =>
 						finalizeAssistantTurn(
@@ -987,6 +1021,7 @@ export default function Chat({
 					setHydratingSessionId(undefined);
 					setSending(false);
 					setPendingApprovals([]);
+					setPendingQuestions([]);
 					setTitleEditing(false);
 					setSessionTitleDraft("");
 					activeAssistantIdRef.current = undefined;
@@ -1102,6 +1137,21 @@ export default function Chat({
 			reason: approved ? "Approved in Cline Hub." : USER_REJECTED_TOOL_REASON,
 		});
 		setStatus(approved ? "Approval sent." : "Rejection sent.");
+	};
+
+	const respondToQuestion = (questionId: string, answer: string) => {
+		const trimmed = answer.trim();
+		if (!trimmed) return;
+		setPendingQuestions((current) =>
+			current.map((item) =>
+				item.questionId === questionId
+					? { ...item, responding: true }
+					: item,
+			),
+		);
+		setQuestionAnswerDraft((current) => ({ ...current, [questionId]: "" }));
+		postToHost({ type: "question_response", questionId, answer: trimmed });
+		setStatus("Answer sent.");
 	};
 
 	return (
@@ -1287,6 +1337,97 @@ export default function Chat({
 					</ConversationContent>
 					<ConversationScrollButton />
 				</Conversation>
+				{pendingQuestions.length > 0 ? (
+					<div className="grid max-h-80 gap-2 overflow-auto border-t bg-background/95 px-4 py-3">
+						{pendingQuestions.map((question) => (
+							<div
+								className="grid gap-2 rounded-lg border bg-card p-3 text-sm"
+								key={question.questionId}
+							>
+								<div className="grid gap-1">
+									<p className="font-semibold">Cline is asking</p>
+									{question.remote ? (
+										<p className="text-xs text-muted-foreground">
+											This session is owned by another Cline client. The
+											answer is relayed, and falls back to sending it as
+											a prompt.
+										</p>
+									) : null}
+									<p className="break-words whitespace-pre-wrap">
+										{question.question}
+									</p>
+								</div>
+								{question.options.length > 0 ? (
+									<div className="grid gap-2 sm:grid-cols-2">
+										{question.options.map((option) => (
+											<Button
+												className="h-auto min-h-11 w-full px-3 py-2 text-left whitespace-normal"
+												disabled={question.responding}
+												key={option}
+												onClick={() =>
+													respondToQuestion(question.questionId, option)
+												}
+												size="sm"
+												type="button"
+												variant="secondary"
+											>
+												{option}
+											</Button>
+										))}
+									</div>
+								) : null}
+								<div className="flex items-center gap-2">
+									<input
+										className="min-w-0 flex-1 rounded-md border bg-background px-2 py-2 text-sm"
+										disabled={question.responding}
+										onChange={(event) =>
+											setQuestionAnswerDraft((current) => ({
+												...current,
+												[question.questionId]: event.target.value,
+											}))
+										}
+										onKeyDown={(event) => {
+											if (
+												event.key === "Enter" &&
+												!event.nativeEvent.isComposing
+											) {
+												event.preventDefault();
+												respondToQuestion(
+													question.questionId,
+													questionAnswerDraft[question.questionId] ?? "",
+												);
+											}
+										}}
+										placeholder="Custom answer"
+										value={questionAnswerDraft[question.questionId] ?? ""}
+									/>
+									<Button
+										className="min-h-11 shrink-0"
+										disabled={
+											question.responding ||
+											!(questionAnswerDraft[question.questionId] ?? "").trim()
+										}
+										onClick={() =>
+											respondToQuestion(
+												question.questionId,
+												questionAnswerDraft[question.questionId] ?? "",
+											)
+										}
+										size="sm"
+										type="button"
+									>
+										{question.responding ? (
+											<Loader2Icon className="size-4 animate-spin" />
+										) : (
+											<CheckIcon className="size-4" />
+										)}
+										Send
+									</Button>
+								</div>
+							</div>
+						))}
+					</div>
+				) : null}
 				{pendingApprovals.length > 0 ? (
 					<div className="grid max-h-72 gap-2 overflow-auto border-t bg-background/95 px-4 py-3">
 						{pendingApprovals.map((approval) => (
