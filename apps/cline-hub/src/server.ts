@@ -1,9 +1,6 @@
 import { CORE_BUILD_VERSION } from "@cline/core";
 import { isNonLocalBindHost } from "./options";
-import {
-	handleToolApprovalResponse,
-	rejectOrphanedApprovals,
-} from "./server/approvals";
+import { handleToolApprovalResponse } from "./server/approvals";
 import { isAuthorizedBrowserToDesktopRequest } from "./server/browser-auth";
 import {
 	browserConfig,
@@ -28,12 +25,17 @@ import {
 	syncHubHealth,
 } from "./server/hub";
 import { fetchMarketplaceCatalog } from "./server/marketplace";
+import { scheduleOrphanCleanup } from "./server/orphans";
 import {
 	loadModels,
 	runProviderOAuthLogin,
 	saveProviderSettings,
 	sendProviderCatalog,
 } from "./server/providers";
+import {
+	answerRemoteQuestion,
+	handleLocalQuestionResponse,
+} from "./server/questions";
 import {
 	abortPeerTurn,
 	deleteSession,
@@ -45,11 +47,6 @@ import {
 	sendAnswerAsPrompt,
 	sendMessage,
 } from "./server/sessions";
-import {
-	answerRemoteQuestion,
-	handleLocalQuestionResponse,
-	resolveOrphanedQuestions,
-} from "./server/questions";
 import { HubContext } from "./server/state";
 import { broadcastHubState, hubStatusPayload } from "./server/state-payloads";
 import type { BrowserFrame, BrowserPeer } from "./server/types";
@@ -278,8 +275,10 @@ export async function startClineHubDashboardServer(): Promise<ClineHubDashboardS
 				const peer = socket.data;
 				peer.unsubscribeEvents?.();
 				ctx.peers.delete(peer);
-				rejectOrphanedApprovals(ctx);
-				resolveOrphanedQuestions(ctx);
+				// A reload closes the old socket a moment before the new one
+				// attaches, so the pending question / approval is given a grace
+				// window instead of being answered on the peer's behalf at once.
+				scheduleOrphanCleanup(ctx);
 			},
 		},
 	});

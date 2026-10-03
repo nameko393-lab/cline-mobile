@@ -1,7 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import {
+	loadSessionIntoMemory,
+	selectSession,
+	sendAnswerAsPrompt,
+	sendMessage,
+} from "./sessions";
 import { HubContext } from "./state";
-import { loadSessionIntoMemory, sendAnswerAsPrompt, sendMessage } from "./sessions";
-import type { BrowserPeer } from "./types";
+import type { BrowserPeer, PendingQuestion } from "./types";
 
 /**
  * The hub lists every session stored on disk, but it only accepts a turn for the
@@ -138,7 +143,9 @@ describe("loading a disk-only session into the hub", () => {
 		expect(sent.map((frame) => frame.type)).toContain("hub_state");
 		const hydrated = sent[1];
 		expect(hydrated?.sessionId).toBe(SOURCE_SESSION_ID);
-		expect((hydrated?.messages as unknown[])?.length).toBe(storedMessages.length);
+		expect((hydrated?.messages as unknown[])?.length).toBe(
+			storedMessages.length,
+		);
 	});
 
 	it("prefers the tracked session row when the record has no workspace", async () => {
@@ -244,7 +251,10 @@ describe("delivering a follow-up answer to a foreign session", () => {
 		const sentModes: unknown[] = [];
 		cline.send = async (input: { sessionId: string; prompt: string }) => {
 			sentModes.push((input as unknown as Record<string, unknown>).mode);
-			cline.sentPrompts.push({ sessionId: input.sessionId, prompt: input.prompt });
+			cline.sentPrompts.push({
+				sessionId: input.sessionId,
+				prompt: input.prompt,
+			});
 		};
 		const ctx = makeContext(cline);
 
@@ -260,5 +270,65 @@ describe("delivering a follow-up answer to a foreign session", () => {
 		const failure = await sendAnswerAsPrompt(ctx, SOURCE_SESSION_ID, "了解");
 
 		expect(failure).toContain("session not found");
+	});
+});
+
+/**
+ * A page that loads after the agent asked (reload, opening the dashboard on the
+ * phone later) gets the transcript from hydration, but the question it is
+ * parked on is live hub state: it has to be re-sent with the attach, otherwise
+ * the options never render and the turn stays parked.
+ */
+describe("attaching to a session parked on a question", () => {
+	function parkQuestion(ctx: HubContext, sessionId: string) {
+		const question: PendingQuestion = {
+			questionId: "question-1",
+			sessionId,
+			question: "どのテーマにしますか？",
+			options: ["Dark", "Light"],
+			createdAt: Date.now(),
+			resolve: vi.fn(),
+			timeout: setTimeout(() => {}, 60_000),
+		};
+		ctx.pendingQuestions.set(question.questionId, question);
+		return () => clearTimeout(question.timeout);
+	}
+
+	it("re-sends the pending question after the transcript is hydrated", async () => {
+		const cline = makeCline();
+		const ctx = makeContext(cline);
+		const { peer, sent } = makePeer(ctx, LOADED_SESSION_ID);
+		const cleanup = parkQuestion(ctx, LOADED_SESSION_ID);
+
+		await selectSession(ctx, peer, LOADED_SESSION_ID);
+		cleanup();
+
+		const hydratedIndex = sent.findIndex((m) => m.type === "session_hydrated");
+		const questionIndex = sent.findIndex((m) => m.type === "question_request");
+		expect(questionIndex).toBeGreaterThanOrEqual(0);
+		expect(sent[questionIndex]).toMatchObject({
+			questionId: "question-1",
+			question: "どのテーマにしますか？",
+			options: ["Dark", "Light"],
+		});
+		// The card must arrive after hydration, which is what the webview
+		// treats as the point where the transcript is complete.
+		expect(hydratedIndex).toBeLessThan(questionIndex);
+	});
+
+	it("cancels the disconnect grace countdown when a peer attaches", async () => {
+		const cline = makeCline();
+		const ctx = makeContext(cline);
+		const { peer } = makePeer(ctx, LOADED_SESSION_ID);
+		const cleanup = parkQuestion(ctx, LOADED_SESSION_ID);
+		ctx.peerDetachTimers.set(
+			LOADED_SESSION_ID,
+			setTimeout(() => {}, 60_000),
+		);
+
+		await selectSession(ctx, peer, LOADED_SESSION_ID);
+		cleanup();
+
+		expect(ctx.peerDetachTimers.has(LOADED_SESSION_ID)).toBe(false);
 	});
 });

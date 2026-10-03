@@ -26,6 +26,14 @@ export class HubContext {
 	readonly pendingToolApprovals = new Map<string, PendingToolApproval>();
 	readonly pendingQuestions = new Map<string, PendingQuestion>();
 	readonly remoteQuestions = new Map<string, RemoteQuestion>();
+	/**
+	 * Grace timers started when the last peer watching a session goes away. A
+	 * browser reload closes the old socket a moment before the new one attaches,
+	 * so answering on the peer's behalf immediately would throw the pending
+	 * question (and any pending approval) away on every refresh.
+	 * Keyed by session id.
+	 */
+	readonly peerDetachTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	readonly events: WebviewHubEvent[] = [];
 
 	hubUrl = "";

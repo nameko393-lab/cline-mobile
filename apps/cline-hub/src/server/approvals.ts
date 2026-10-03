@@ -2,6 +2,7 @@ import type { ToolApprovalRequest, ToolApprovalResult } from "@cline/shared";
 import type { WebviewInboundMessage } from "../webview-protocol";
 import type { HubContext } from "./state";
 import { broadcastHubState } from "./state-payloads";
+import type { BrowserPeer } from "./types";
 
 function createApprovalId(): string {
 	return `approval-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -86,6 +87,8 @@ export function requestToolApprovalFromWebview(
 		}, 10 * 60_000);
 		ctx.pendingToolApprovals.set(approvalId, {
 			sessionId: request.sessionId,
+			request,
+			createdAt: Date.now(),
 			resolve,
 			timeout,
 		});
@@ -119,4 +122,29 @@ export function handleToolApprovalResponse(
 	if (!resolved) {
 		console.warn(`Ignoring unknown tool approval response: ${approvalId}`);
 	}
+}
+
+/**
+ * Re-send the approvals a session is parked on to a peer that just attached.
+ *
+ * Same reason as the questions: the card is built from the `approval_request`
+ * frame alone, so a page that loads after the agent asked for approval shows
+ * nothing while the turn sits parked.
+ */
+export function replayPendingApprovalsForPeer(
+	ctx: HubContext,
+	peer: BrowserPeer,
+	sessionId: string,
+): number {
+	let sent = 0;
+	for (const [approvalId, pending] of ctx.pendingToolApprovals) {
+		if (pending.sessionId !== sessionId) continue;
+		ctx.send(peer, {
+			type: "approval_request",
+			approvalId,
+			...pending.request,
+		});
+		sent += 1;
+	}
+	return sent;
 }

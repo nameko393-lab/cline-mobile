@@ -7,14 +7,22 @@ import {
 } from "@cline/core";
 import type { MessageWithMetadata } from "@cline/llms";
 import type { WebviewConfig, WebviewReasonLevel } from "../webview-protocol";
-import { rejectPendingApprovalsForSession } from "./approvals";
+import {
+	rejectPendingApprovalsForSession,
+	replayPendingApprovalsForPeer,
+} from "./approvals";
 import { providerSettingsManager, workspaceRoot } from "./deps";
-import { QUESTION_ANSWER_ABORTED, resolveQuestionsForSession } from "./questions";
+import { cancelOrphanCleanup } from "./orphans";
 import {
 	loadProviders,
 	resolveBrowserDefaults,
 	sendProviderCatalog,
 } from "./providers";
+import {
+	QUESTION_ANSWER_ABORTED,
+	replayPendingQuestionsForPeer,
+	resolveQuestionsForSession,
+} from "./questions";
 import {
 	mapHistoryToWebviewMessages,
 	trackSession,
@@ -221,7 +229,10 @@ export async function loadSessionIntoMemory(
 	// back without it, so the tracked row is the better launch context.
 	const tracked = ctx.sessions.get(sessionId);
 	if (!source && !tracked) return undefined;
-	const history = (await loadHistoryFor(ctx, sessionId)) as MessageWithMetadata[];
+	const history = (await loadHistoryFor(
+		ctx,
+		sessionId,
+	)) as MessageWithMetadata[];
 	const metadata =
 		source?.metadata && typeof source.metadata === "object"
 			? (source.metadata as Record<string, unknown>)
@@ -258,6 +269,7 @@ export async function loadSessionIntoMemory(
 		modelId: loaded?.model ?? context.modelId,
 		messages: mapHistoryToWebviewMessages(history),
 	});
+	replayParkedState(ctx, peer, result.sessionId);
 	ctx.pushEvent(
 		"Session loaded",
 		`${sessionId} was loaded into the hub so the conversation can continue.`,
@@ -283,6 +295,26 @@ export async function selectSession(
 		modelId: tracked?.model,
 		messages: mapHistoryToWebviewMessages(history),
 	});
+	replayParkedState(ctx, peer, sessionId);
+}
+
+/**
+ * Show a peer that just attached everything the session is parked on.
+ *
+ * Hydration replays the transcript, but a pending follow-up question or tool
+ * approval is live hub state, not history: without re-sending it a page that
+ * loads after the agent asked renders no options and the turn stays parked
+ * until the hub's own timeout. Attaching also cancels the disconnect grace
+ * countdown for that session.
+ */
+function replayParkedState(
+	ctx: HubContext,
+	peer: BrowserPeer,
+	sessionId: string,
+): void {
+	cancelOrphanCleanup(ctx, sessionId);
+	replayPendingApprovalsForPeer(ctx, peer, sessionId);
+	replayPendingQuestionsForPeer(ctx, peer, sessionId);
 }
 
 export async function createSession(
@@ -340,6 +372,7 @@ export async function createSession(
 		mode,
 		userImages: attachments?.userImages,
 	});
+	replayParkedState(ctx, peer, result.sessionId);
 }
 
 export async function sendMessage(

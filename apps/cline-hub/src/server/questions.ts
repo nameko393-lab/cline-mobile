@@ -5,6 +5,7 @@ import type {
 } from "../webview-protocol";
 import type { HubContext } from "./state";
 import { broadcastHubState } from "./state-payloads";
+import type { BrowserPeer } from "./types";
 import { asRecord, asString } from "./utils";
 
 /**
@@ -87,6 +88,7 @@ export function requestQuestionFromWebview(
 	}
 
 	const questionId = createQuestionId();
+	const createdAt = Date.now();
 	ctx.pushEvent(
 		"Question requested",
 		"Cline is waiting for an answer to a question",
@@ -99,7 +101,11 @@ export function requestQuestionFromWebview(
 			resolveQuestion(ctx, questionId, QUESTION_ANSWER_TIMEOUT);
 		}, QUESTION_TIMEOUT_MS);
 		ctx.pendingQuestions.set(questionId, {
+			questionId,
 			sessionId: request.sessionId,
+			question,
+			options,
+			createdAt,
 			resolve,
 			timeout,
 		});
@@ -109,7 +115,7 @@ export function requestQuestionFromWebview(
 			sessionId: request.sessionId,
 			question,
 			options,
-			createdAt: Date.now(),
+			createdAt,
 		};
 		ctx.sendToSelectedPeers(request.sessionId, payload);
 	});
@@ -331,4 +337,59 @@ export async function answerRemoteQuestion(
 			: "Answer delivered as a prompt for a session owned by another client",
 		promptError ? "warn" : "success",
 	);
+}
+
+/**
+ * The questions a peer must be shown for a session it is attaching to: the
+ * `ask_question` calls this dashboard parked on its own sessions, plus the
+ * mirrored questions from sessions owned by another hub client.
+ */
+export function pendingQuestionRequestsForSession(
+	ctx: HubContext,
+	sessionId: string,
+): WebviewQuestionRequest[] {
+	const requests: WebviewQuestionRequest[] = [];
+	for (const [questionId, pending] of ctx.pendingQuestions) {
+		if (pending.sessionId !== sessionId) continue;
+		requests.push({
+			type: "question_request",
+			questionId,
+			sessionId,
+			question: pending.question,
+			options: pending.options,
+			createdAt: pending.createdAt,
+		});
+	}
+	for (const [requestId, remote] of ctx.remoteQuestions) {
+		if (remote.sessionId !== sessionId) continue;
+		requests.push({
+			type: "question_request",
+			questionId: requestId,
+			sessionId,
+			question: remote.question,
+			options: remote.options,
+			remote: true,
+		});
+	}
+	return requests;
+}
+
+/**
+ * Re-send the questions a session is parked on to a peer that just attached.
+ *
+ * The card a browser renders is built from the `question_request` frame alone,
+ * so a page that loads after the agent asked (a reload, opening the dashboard
+ * on the phone later) shows no options and the turn stays parked: hydrating the
+ * transcript is not enough, the question is live state and not history.
+ */
+export function replayPendingQuestionsForPeer(
+	ctx: HubContext,
+	peer: BrowserPeer,
+	sessionId: string,
+): number {
+	const requests = pendingQuestionRequestsForSession(ctx, sessionId);
+	for (const request of requests) {
+		ctx.send(peer, request);
+	}
+	return requests.length;
 }

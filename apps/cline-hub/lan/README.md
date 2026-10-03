@@ -283,6 +283,24 @@ desktop 側は無変更で動きます。desktop 画面で同じ質問に同時�
 実装: `src/server/questions.ts` / `src/webview/src/Chat.tsx` / `src/server/sessions.ts`
 （`sendAnswerAsPrompt`）。検証: `bun run -F @cline/cline-hub test`。
 
+### 再読み込み後も質問カードと承認カードは残る
+
+質問カードはライブの `question_request` フレームだけで作られるので、セッションの
+トランスクリプト（hydration）だけでは復元できません。hub は保留中の質問・ツール承認を
+ペイロード込みで保持し、peer がセッションに attach した時に hydration の後で
+`question_request` / `approval_request` を送り直します。送り直した `questionId` /
+`approvalId` はライブのものと同一なので、再読み込み後のページから回答すればそのまま
+止まっているターンが再開します。
+
+peer が全員いなくなると 90 秒（`PEER_DETACH_GRACE_MS`）の猶予に入り、その間に再 attach
+すれば取り消されます。猶予が切れた時点で初めて質問は `(no peer available)`、承認は拒否で
+解決されます。ブラウザの再読み込みは旧 socket を閉じた直後に新 socket が attach する動きに
+なるため、この猶予がないと更新のたびに保留中の質問が勝手に回答されてしまいます。
+
+- 実装: `src/server/questions.ts` / `src/server/approvals.ts` / `src/server/orphans.ts`
+- 検証: `bun run -F @cline/cline-hub test`（`orphans.test.ts`）
+- 実機での確認手順（live のエージェントターンを使う手順書）: `VERIFICATION.md`
+
 ## 実測で確定した制約
 
 1. **本番ビルドで動かす**: `CLINE_BUILD_ENV=development` を設定すると dev hub

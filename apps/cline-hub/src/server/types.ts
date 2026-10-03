@@ -1,5 +1,5 @@
 import type { SaveProviderSettingsActionRequest } from "@cline/core";
-import type { ToolApprovalResult } from "@cline/shared";
+import type { ToolApprovalRequest, ToolApprovalResult } from "@cline/shared";
 import type {
 	WebviewInboundMessage,
 	WebviewReasonLevel,
@@ -62,6 +62,12 @@ export type BrowserPeer = {
 
 export type PendingToolApproval = {
 	sessionId: string;
+	/**
+	 * The request as it was broadcast, so a peer that attaches later (a page
+	 * reload, a second phone) can be shown the same card.
+	 */
+	request: ToolApprovalRequest;
+	createdAt: number;
 	resolve: (result: ToolApprovalResult) => void;
 	timeout: ReturnType<typeof setTimeout>;
 };
@@ -69,9 +75,18 @@ export type PendingToolApproval = {
 /**
  * A follow-up question raised inside a session this dashboard owns. The agent
  * is parked on the `ask_question` tool until `resolve` runs.
+ *
+ * The question text and options are kept alongside the resolver: the card a
+ * browser renders is built from them, and a peer that attaches after the
+ * question was raised (page reload, phone opened later) must be able to see
+ * the same options, not just learn that something is pending.
  */
 export type PendingQuestion = {
+	questionId: string;
 	sessionId: string;
+	question: string;
+	options: string[];
+	createdAt: number;
 	resolve: (answer: string) => void;
 	timeout: ReturnType<typeof setTimeout>;
 };

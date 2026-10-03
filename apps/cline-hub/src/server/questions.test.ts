@@ -1,6 +1,7 @@
 import type { HubEventEnvelope } from "@cline/shared";
 import { describe, expect, it, vi } from "vitest";
 import type { HubContext } from "./state";
+import type { BrowserPeer } from "./types";
 
 // questions.ts only needs broadcastHubState at runtime; mocking it keeps the
 // test from loading @cline/core (state-payloads imports it at module scope).
@@ -10,8 +11,10 @@ import {
 	answerRemoteQuestion,
 	handleLocalQuestionResponse,
 	observeHubEventForQuestions,
+	pendingQuestionRequestsForSession,
 	QUESTION_ANSWER_NO_PEER,
 	QUESTION_ANSWER_TIMEOUT,
+	replayPendingQuestionsForPeer,
 	requestQuestionFromWebview,
 	resolveAllPendingQuestions,
 	resolveOrphanedQuestions,
@@ -426,5 +429,74 @@ describe("requestQuestionFromWebview", () => {
 
 			expect(deliverAsPrompt).not.toHaveBeenCalled();
 		});
+	});
+});
+
+/**
+ * A page that loads after the agent asked (reload, opening the dashboard on the
+ * phone later) has no live `question_request` frame, so the options have to come
+ * back with the session the peer attaches to.
+ */
+describe("replayPendingQuestionsForPeer", () => {
+	it("re-sends a question this dashboard owns, with its options", async () => {
+		const { ctx, sent, peers } = makeContext();
+		const answerPromise = requestQuestionFromWebview(ctx, {
+			sessionId: "session-1",
+			question: "Which theme should the site use?",
+			options: ["Dark", "Light"],
+		});
+		// The reload drops the frames the old peer received.
+		sent.length = 0;
+		const peer = [...peers][0] as unknown as BrowserPeer;
+
+		expect(replayPendingQuestionsForPeer(ctx, peer, "session-1")).toBe(1);
+		expect(sent[0]?.payload).toMatchObject({
+			type: "question_request",
+			sessionId: "session-1",
+			question: "Which theme should the site use?",
+			options: ["Dark", "Light"],
+		});
+
+		// The replayed id is the live one, so answering it resumes the agent.
+		const questionId = String(sent[0]?.payload?.questionId);
+		expect(resolveQuestion(ctx, questionId, "Dark")).toBe(true);
+		await expect(answerPromise).resolves.toBe("Dark");
+	});
+
+	it("re-sends a mirrored question from a session owned by another client", () => {
+		const { ctx, sent, peers } = makeContext();
+		observeHubEventForQuestions(
+			ctx,
+			capabilityRequested("session-1", "capreq_1", "client-desktop", "Q?", [
+				"a",
+				"b",
+			]),
+		);
+		sent.length = 0;
+		const peer = [...peers][0] as unknown as BrowserPeer;
+
+		expect(replayPendingQuestionsForPeer(ctx, peer, "session-1")).toBe(1);
+		expect(sent[0]?.payload).toMatchObject({
+			type: "question_request",
+			questionId: "capreq_1",
+			sessionId: "session-1",
+			question: "Q?",
+			options: ["a", "b"],
+			remote: true,
+		});
+	});
+
+	it("replays nothing for a session with no pending question", () => {
+		const { ctx, sent, peers } = makeContext();
+		observeHubEventForQuestions(
+			ctx,
+			capabilityRequested("session-1", "capreq_1", "client-desktop", "Q?", []),
+		);
+		sent.length = 0;
+		const peer = [...peers][0] as unknown as BrowserPeer;
+
+		expect(replayPendingQuestionsForPeer(ctx, peer, "session-2")).toBe(0);
+		expect(sent).toHaveLength(0);
+		expect(pendingQuestionRequestsForSession(ctx, "session-2")).toEqual([]);
 	});
 });
